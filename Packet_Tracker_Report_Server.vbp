@@ -1,8 +1,9 @@
 Type=Exe
 Reference=*\G{00020430-0000-0000-C000-000000000046}#2.0#0#..\..\..\..\..\Windows\SysWOW64\stdole2.tlb#OLE Automation
-Reference=*\G{2A75196C-D9EB-4129-B803-931327F72D5C}#2.8#0#..\..\..\..\..\Program Files (x86)\Common Files\System\ado\msado28.tlb#Microsoft ActiveX Data Objects 2.8 Library
 Reference=*\G{CD000000-8B95-11D1-82DB-00C04FB1625D}#1.0#0#..\..\..\..\..\Windows\SysWOW64\cdosys.dll#Microsoft CDO for Windows 2000 Library
+Reference=*\G{00000205-0000-0010-8000-00AA006D2EA4}#2.5#0#..\..\..\..\..\Program Files (x86)\Common Files\System\ado\msado25.tlb#Microsoft ActiveX Data Objects 2.5 Library
 Form=JPTRS.frm
+Module=Module1; Module1.bas
 Startup="JPTRS"
 Command32=""
 Name="Packet_Tracker_Report_Server"

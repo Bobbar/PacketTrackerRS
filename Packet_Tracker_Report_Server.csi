@@ -1,7 +1,15 @@
 [History]
-1=#P0#=mb	#P1#=EnumRegistryValues	#P2#=Packet_Tracker_Report_Server/Module1/EnumRegistryValues	#P3#=	#P4#=	#P5#=MembMethodPrivate	#P6#=20131217093541	#P7#=0	#P8#=43	.
-2=#P0#=mb	#P1#=FindMySQLDriver	#P2#=Packet_Tracker_Report_Server/Module1/FindMySQLDriver	#P3#=	#P4#=	#P5#=MembMethodPrivate	#P6#=20131217093424	#P7#=0	#P8#=-1	.
-3=#P0#=mb	#P1#=Form_QueryUnload	#P2#=Packet_Tracker_Report_Server/JPTRS/Form_QueryUnload	#P3#=	#P4#=	#P5#=MembEventProcPrivate	#P6#=20131217093444	#P7#=0	#P8#=1	.
-4=#P0#=mb	#P1#=Form_Load	#P2#=Packet_Tracker_Report_Server/JPTRS/Form_Load	#P3#=	#P4#=	#P5#=MembEventProcPrivate	#P6#=20131217093433	#P7#=0	#P8#=0	.
-5=#P0#=mb	#P1#=SendNotification	#P2#=Packet_Tracker_Report_Server/Module1/SendNotification	#P3#=	#P4#=	#P5#=MembMethodPrivate	#P6#=20131217093138	#P7#=0	#P8#=-1	.
-6=#P0#=mb	#P1#=GenerateHTML	#P2#=Packet_Tracker_Report_Server/Module1/GenerateHTML	#P3#=	#P4#=	#P5#=MembMethodPrivate	#P6#=20131217092758	#P7#=0	#P8#=-3	.
+1=#P0#=mb	#P1#=ToLog	#P2#=Packet_Tracker_Report_Server/Module1/ToLog	#P3#=	#P4#=	#P5#=MembMethodPrivate	#P6#=20131217135631	#P7#=0	#P8#=6	.
+2=#P0#=mb	#P1#=SendEmails	#P2#=Packet_Tracker_Report_Server/Module1/SendEmails	#P3#=	#P4#=	#P5#=MembMethodPrivate	#P6#=20131217132931	#P7#=0	#P8#=3	.
+3=#P0#=mb	#P1#=chkVerbose_Click	#P2#=Packet_Tracker_Report_Server/JPTRS/chkVerbose_Click	#P3#=	#P4#=	#P5#=MembEventProcPrivate	#P6#=20131217141127	#P7#=0	#P8#=0	.
+4=#P0#=mb	#P1#=Form_Load	#P2#=Packet_Tracker_Report_Server/JPTRS/Form_Load	#P3#=	#P4#=	#P5#=MembEventProcPrivate	#P6#=20131217140030	#P7#=0	#P8#=-1	.
+5=#P0#=mb	#P1#=GetUserIndex	#P2#=Packet_Tracker_Report_Server/Module1/GetUserIndex	#P3#=	#P4#=	#P5#=MembMethodPrivate	#P6#=20131217135526	#P7#=0	#P8#=-2	.
+6=#P0#=mb	#P1#=CheckQueue	#P2#=Packet_Tracker_Report_Server/Module1/CheckQueue	#P3#=	#P4#=	#P5#=MembMethodPrivate	#P6#=20131217131621	#P7#=0	#P8#=2	.
+7=#P0#=mb	#P1#=cmdCommand1_Click	#P2#=Packet_Tracker_Report_Server/JPTRS/cmdCommand1_Click	#P3#=	#P4#=	#P5#=MembEventProcPrivate	#P6#=20131217141206	#P7#=0	#P8#=1	.
+8=#P0#=mb	#P1#=GenerateHTML	#P2#=Packet_Tracker_Report_Server/Module1/GenerateHTML	#P3#=	#P4#=	#P5#=MembMethodPrivate	#P6#=20131217144816	#P7#=0	#P8#=17	.
+9=#P0#=mb	#P1#=SendNotification	#P2#=Packet_Tracker_Report_Server/Module1/SendNotification	#P3#=	#P4#=	#P5#=MembMethodPrivate	#P6#=20131217145833	#P7#=0	#P8#=31	.
+10=#P0#=mb	#P1#=ClearEmailQueue	#P2#=Packet_Tracker_Report_Server/Module1/ClearEmailQueue	#P3#=	#P4#=	#P5#=MembMethodPrivate	#P6#=20131217144351	#P7#=0	#P8#=2	.
+11=#P0#=mb	#P1#=tmrCheckQueue_Timer	#P2#=Packet_Tracker_Report_Server/JPTRS/tmrCheckQueue_Timer	#P3#=	#P4#=	#P5#=MembEventProcPrivate	#P6#=20131217132950	#P7#=0	#P8#=4	.
+12=#P0#=mb	#P1#=FindMySQLDriver	#P2#=Packet_Tracker_Report_Server/Module1/FindMySQLDriver	#P3#=	#P4#=	#P5#=MembMethodPrivate	#P6#=20131217125335	#P7#=0	#P8#=-3	.
+13=#P0#=mb	#P1#=EnumRegistryValues	#P2#=Packet_Tracker_Report_Server/Module1/EnumRegistryValues	#P3#=	#P4#=	#P5#=MembMethodPrivate	#P6#=20131217093541	#P7#=0	#P8#=16	.
+14=#P0#=mb	#P1#=Form_QueryUnload	#P2#=Packet_Tracker_Report_Server/JPTRS/Form_QueryUnload	#P3#=	#P4#=	#P5#=MembEventProcPrivate	#P6#=20131217093444	#P7#=0	#P8#=3	.

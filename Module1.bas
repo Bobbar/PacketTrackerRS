@@ -1,4 +1,5 @@
 Attribute VB_Name = "Module1"
+Option Explicit
 Global cn_global As New ADODB.Connection
 Public Const colCreate       As Long = &H80C0FF
 Public Const colInTransit    As Long = &H80FF80
@@ -41,6 +42,67 @@ Const REG_DWORD = 4
 Const REG_MULTI_SZ = 7
 Const ERROR_MORE_DATA = 234
 Const KEY_READ = &H20019 ' ((READ_CONTROL Or KEY_QUERY_VALUE Or
+Public Type EmailInfo
+SendOrRec As String
+strFrom As String
+strTo As String
+Comment As String
+JobNum As String
+Description As String
+PartNum As String
+Customer As String
+Creator As String
+CreateDate As String
+GUID As String
+
+End Type
+Public EmailData() As EmailInfo
+
+Public strUserIndex()    As String
+Public bolVerbose As Boolean
+Public strLogLoc As String
+
+
+Public Sub GetUserIndex()
+    Dim rs      As New ADODB.Recordset
+    Dim strSQL1 As String
+    Dim i       As Integer
+ 
+    strSQL1 = "select * from users"
+    cn_global.CursorLocation = adUseClient
+    rs.Open strSQL1, cn_global, adOpenKeyset
+    i = 1
+    ReDim strUserIndex(2, rs.RecordCount)
+    Do Until rs.EOF
+        With rs
+            strUserIndex(0, i) = UCase$(!idUsers)
+            strUserIndex(1, i) = !idFullname
+            strUserIndex(2, i) = !idEmail
+            i = i + 1
+            rs.MoveNext
+        End With
+    Loop
+End Sub
+Public Function GetEmail(strUsername As String) As String
+    Dim i As Integer
+    For i = 0 To UBound(strUserIndex, 2)
+        If strUserIndex(0, i) = strUsername Then
+            GetEmail = UCase$(strUserIndex(2, i))
+            Exit Function
+        End If
+    Next i
+End Function
+Public Function GetFullName(strUsername As String) As String
+    Dim i As Integer
+    For i = 0 To UBound(strUserIndex, 2)
+        If strUserIndex(0, i) = strUsername Then
+            GetFullName = UCase$(strUserIndex(1, i))
+            Exit Function
+        End If
+    Next i
+End Function
+
+
 Public Sub FindMySQLDriver()
     GetODBCDrivers
     Dim i           As Integer
@@ -172,9 +234,9 @@ Public Sub SendNotification(SendRec As String, _
         .To = GetEmail(MailTo)
         .From = GetEmail(MailFrom)
         If UCase$(SendRec) = "SEND" Then
-            .Subject = "JPT: " & GetFullName(strLocalUser) & " sent you a packet"
+            .Subject = "JPT: " & GetFullName(MailFrom) & " sent you a packet  (" & JobNum & ")"
         ElseIf UCase$(SendRec) = "REC" Then
-            .Subject = "JPT: " & GetFullName(strLocalUser) & " received a packet"
+            .Subject = "JPT: " & GetFullName(MailFrom) & " received a packet  (" & JobNum & ")"
         End If
         .HTMLBody = GenerateHTML(SendRec, GetFullName(MailFrom), MailTo, JobNum, strDescrip, strPartNum, strCustomer, strCreator, strCreateDate, strComment)
         '.TextBody = Message
@@ -183,15 +245,15 @@ Public Sub SendNotification(SendRec As String, _
     Set iMsg = Nothing
     Set iConf = Nothing
     Set Flds = Nothing
-    'Exit Sub
-    'errs:
+    Exit Sub
+errs:
     ' Debug.Print Err.Number
-    ' If Err.Number = -2147220973 Then
-    '    MsgBox "Failed to send EMail notification!"
-    '  End If
+     
+        ToLog "Failed to send EMail notification!"
+        ToLog "ERROR DTL:  SUB = SendNotification - " & Err.Number & " - " & Err.Description
+        
+    
 End Sub
-
-
 Public Function GenerateHTML(strSendOrRec As String, _
                              strFrom As String, _
                              strTo As String, _
@@ -210,6 +272,7 @@ Public Function GenerateHTML(strSendOrRec As String, _
         tmpHTML = tmpHTML + "<HTML>" & vbCrLf
         tmpHTML = tmpHTML + "<BODY BGCOLOR=" & BackColor & ">" & vbCrLf
         tmpHTML = tmpHTML + "<FONT STYLE=font-family:Tahoma;>" & vbCrLf
+        tmpHTML = tmpHTML + "<FONT SIZE=2>" & DateTime.Date$ & " " & DateTime.Time$ & "</FONT><BR>"
         tmpHTML = tmpHTML + "<FONT SIZE=6><U>Message from Job Packet Tracker:</U></FONT><BR><BR>" & vbCrLf
         tmpHTML = tmpHTML + strFrom & " is sending Job Packet <b>" & strPacketNum & "</b> to you. <BR><BR>" & vbCrLf
         If strComment <> "" Then
@@ -254,6 +317,7 @@ Public Function GenerateHTML(strSendOrRec As String, _
         tmpHTML = tmpHTML + "<HTML>" & vbCrLf
         tmpHTML = tmpHTML + "<BODY BGCOLOR=" & BackColor & ">" & vbCrLf
         tmpHTML = tmpHTML + "<FONT STYLE=font-family:Tahoma;>" & vbCrLf
+        tmpHTML = tmpHTML + "<FONT SIZE=2>" & DateTime.Date$ & " " & DateTime.Time$ & "</FONT><BR>" & vbCrLf
         tmpHTML = tmpHTML + "<FONT SIZE=6><U>Message from Job Packet Tracker:</U></FONT><BR><BR>" & vbCrLf
         tmpHTML = tmpHTML + strFrom & " has received Job Packet <b>" & strPacketNum & "</b><BR><BR>" & vbCrLf
         If strComment <> "" Then
@@ -298,4 +362,73 @@ Public Function GenerateHTML(strSendOrRec As String, _
     'errs:
     '    Debug.Print Err.Number
 End Function
-
+Public Sub CheckQueue()
+    Dim rs      As New ADODB.Recordset
+    Dim strSQL1 As String
+    cn_global.CursorLocation = adUseClient
+    strSQL1 = "SELECT * FROM emailqueue d LEFT JOIN packetlist c ON c.idJobNum = d.idJobNum"
+    Set rs = cn_global.Execute(strSQL1)
+    If rs.RecordCount = 0 Then
+        Exit Sub
+    Else
+        ToLog "Emails found in queue.  Parsing..."
+    End If
+    ReDim EmailData(rs.RecordCount)
+    Do Until rs.EOF
+        With rs
+            EmailData(.AbsolutePosition - 1).SendOrRec = !idSendOrRec
+            EmailData(.AbsolutePosition - 1).strFrom = !idFrom
+            EmailData(.AbsolutePosition - 1).strTo = !idTo
+            EmailData(.AbsolutePosition - 1).JobNum = !idJobNum
+            EmailData(.AbsolutePosition - 1).PartNum = !idPartNum
+            EmailData(.AbsolutePosition - 1).Customer = !idCustPONum
+            EmailData(.AbsolutePosition - 1).Comment = !idComment
+            EmailData(.AbsolutePosition - 1).Creator = !idCreator
+            EmailData(.AbsolutePosition - 1).CreateDate = !idCreateDate
+            EmailData(.AbsolutePosition - 1).Description = !idDescription
+            EmailData(.AbsolutePosition - 1).GUID = .Fields(5)
+            .MoveNext
+        End With
+    Loop
+    rs.Close
+    SendEmails
+    ClearEmailQueue
+End Sub
+Public Sub ToLog(Message As String)
+    Dim tmpMsg As String
+    If Dir$(strLogLoc) = "" Then MkDir Environ$("APPDATA") & "\JPTRS\"
+    Open strLogLoc For Append As #1
+    With JPTRS
+        tmpMsg = DateTime.Date & " " & DateTime.Time & ": " & Message
+        .lstLog.AddItem tmpMsg
+        Print #1, tmpMsg
+        Close #1
+    End With
+End Sub
+Public Sub SendEmails()
+    Dim i As Integer
+    For i = 0 To UBound(EmailData) - 1
+        If bolVerbose Then ToLog "Sending SMTP: " & EmailData(i).SendOrRec & " - " & EmailData(i).strFrom & " - " & EmailData(i).strTo & " - " & EmailData(i).JobNum & " - " & EmailData(i).Description & " - " & EmailData(i).PartNum & " - " & EmailData(i).Customer & " - " & EmailData(i).Creator & " - " & EmailData(i).CreateDate & " - " & EmailData(i).Comment
+        JPTRS.lblStatus.Caption = "Sending EMail...."
+        SendNotification EmailData(i).SendOrRec, EmailData(i).strFrom, EmailData(i).strTo, EmailData(i).JobNum, EmailData(i).Description, EmailData(i).PartNum, EmailData(i).Customer, EmailData(i).Creator, EmailData(i).CreateDate, EmailData(i).Comment
+    Next
+End Sub
+Public Sub ClearEmailQueue()
+    Dim i       As Integer
+    Dim rs      As New ADODB.Recordset
+    Dim strSQL1 As String
+    cn_global.CursorLocation = adUseClient
+   If bolVerbose Then ToLog "Clearing Queue..."
+    For i = 0 To UBound(EmailData) - 1
+        strSQL1 = "SELECT * From emailqueue Where idGUID = '" & EmailData(i).GUID & "'"
+        JPTRS.lblStatus.Caption = "Clearing Queue..."
+        
+        rs.Open strSQL1, cn_global, adOpenKeyset, adLockOptimistic
+        With rs
+            .Delete
+            .Update
+        End With
+        rs.Close
+    Next i
+    ReDim EmailData(0)
+End Sub

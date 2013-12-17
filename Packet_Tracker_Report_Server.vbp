@@ -5,6 +5,7 @@ Reference=*\G{00000205-0000-0010-8000-00AA006D2EA4}#2.5#0#..\..\..\..\..\Program
 Form=JPTRS.frm
 Module=Module1; Module1.bas
 Startup="JPTRS"
+ExeName32="Packet_Tracker_Report_Server.exe"
 Command32=""
 Name="Packet_Tracker_Report_Server"
 HelpContextID="0"

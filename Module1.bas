@@ -1,16 +1,16 @@
 Attribute VB_Name = "Module1"
 Option Explicit
-Global cn_global As New ADODB.Connection
-Public Const colCreate       As Long = &H80C0FF
-Public Const colInTransit    As Long = &H80FF80
-Public Const colReceived     As Long = &H80FFFF
-Public Const colClosed       As Long = &H8080FF
-Public Const colFiled        As Long = &HFF8080
-Public Const colReopened     As Long = &HFF80FF
+Global cn_global              As New ADODB.Connection
+Public Const colCreate        As Long = &H80C0FF
+Public Const colInTransit     As Long = &H80FF80
+Public Const colReceived      As Long = &H80FFFF
+Public Const colClosed        As Long = &H8080FF
+Public Const colFiled         As Long = &HFF8080
+Public Const colReopened      As Long = &HFF80FF
 Public Const strServerAddress As String = "10.35.1.40"
-Public Const strUsername As String = "TicketApp"
-Public Const strPassword As String = "yb4w4"
-Public strSQLDriver As String
+Public Const strUsername      As String = "TicketApp"
+Public Const strPassword      As String = "yb4w4"
+Public strSQLDriver           As String
 Const HKEY_LOCAL_MACHINE = &H80000002
 Private Declare Function RegOpenKeyEx _
                 Lib "advapi32.dll" _
@@ -43,31 +43,53 @@ Const REG_MULTI_SZ = 7
 Const ERROR_MORE_DATA = 234
 Const KEY_READ = &H20019 ' ((READ_CONTROL Or KEY_QUERY_VALUE Or
 Public Type EmailInfo
-SendOrRec As String
-strFrom As String
-strTo As String
-Comment As String
-JobNum As String
-Description As String
-PartNum As String
-Customer As String
-Creator As String
-CreateDate As String
-GUID As String
-
+    SendOrRec As String
+    strFrom As String
+    strTo As String
+    Comment As String
+    JobNum As String
+    Description As String
+    PartNum As String
+    Customer As String
+    Creator As String
+    CreateDate As String
+    GUID As String
 End Type
-Public EmailData() As EmailInfo
-
-Public strUserIndex()    As String
-Public bolVerbose As Boolean
-Public strLogLoc As String
-
+Public EmailData()    As EmailInfo
+Public strUserIndex() As String
+Public bolVerbose     As Boolean
+Public strLogLoc      As String
+Public Type NOTIFYICONDATA
+    cbSize As Long
+    hwnd As Long
+    uId As Long
+    uFlags As Long
+    uCallBackMessage As Long
+    hIcon As Long
+    szTip As String * 64
+End Type
+Public Const NIM_ADD = &H0
+Public Const NIM_MODIFY = &H1
+Public Const NIM_DELETE = &H2
+Public Const WM_MOUSEMOVE = &H200
+Public Const NIF_MESSAGE = &H1
+Public Const NIF_ICON = &H2
+Public Const NIF_TIP = &H4
+Public Const WM_LBUTTONDBLCLK = &H203 'Double-click
+Public Const WM_LBUTTONDOWN = &H201 'Button down
+Public Const WM_LBUTTONUP = &H202 'Button up
+Public Const WM_RBUTTONDBLCLK = &H206 'Double-click
+Public Const WM_RBUTTONDOWN = &H204 'Button down
+Public Const WM_RBUTTONUP = &H205 'Button up
+Public Declare Function Shell_NotifyIcon _
+               Lib "shell32" _
+               Alias "Shell_NotifyIconA" (ByVal dwMessage As Long, _
+                                          pnid As NOTIFYICONDATA) As Boolean
 
 Public Sub GetUserIndex()
     Dim rs      As New ADODB.Recordset
     Dim strSQL1 As String
     Dim i       As Integer
- 
     strSQL1 = "select * from users"
     cn_global.CursorLocation = adUseClient
     rs.Open strSQL1, cn_global, adOpenKeyset
@@ -101,8 +123,6 @@ Public Function GetFullName(strUsername As String) As String
         End If
     Next i
 End Function
-
-
 Public Sub FindMySQLDriver()
     GetODBCDrivers
     Dim i           As Integer
@@ -217,8 +237,9 @@ Public Sub SendNotification(SendRec As String, _
                             strPartNum As String, _
                             strCustomer As String, _
                             strCreator As String, _
-                            strCreateDate As String, strComment As String)
-    'On Error GoTo errs
+                            strCreateDate As String, _
+                            strComment As String)
+    On Error GoTo errs
     Dim iConf As New CDO.Configuration
     Dim Flds  As ADODB.Fields
     Dim iMsg  As New CDO.Message
@@ -248,11 +269,8 @@ Public Sub SendNotification(SendRec As String, _
     Exit Sub
 errs:
     ' Debug.Print Err.Number
-     
-        ToLog "Failed to send EMail notification!"
-        ToLog "ERROR DTL:  SUB = SendNotification - " & Err.Number & " - " & Err.Description
-        
-    
+    ToLog "Failed to send EMail notification!"
+    If bolVerbose Then ToLog "ERROR DTL:  SUB = SendNotification | " & Err.Number & " - " & Err.Description
 End Sub
 Public Function GenerateHTML(strSendOrRec As String, _
                              strFrom As String, _
@@ -264,7 +282,7 @@ Public Function GenerateHTML(strSendOrRec As String, _
                              strCreator As String, _
                              strCreateDate As String, _
                              strComment As String) As String
-    ' On Error GoTo errs
+    On Error GoTo errs
     Dim tmpHTML As String
     If UCase$(strSendOrRec) = "SEND" Then
         Dim BackColor As String
@@ -304,7 +322,7 @@ Public Function GenerateHTML(strSendOrRec As String, _
         tmpHTML = tmpHTML + "<td><b>Create Date:</b></td>" & vbCrLf
         tmpHTML = tmpHTML + "</tr>" & vbCrLf
         tmpHTML = tmpHTML + "<tr>" & vbCrLf
-        tmpHTML = tmpHTML + "<td>" & strCreator & "</td>" & vbCrLf
+        tmpHTML = tmpHTML + "<td>" & GetFullName(strCreator) & "</td>" & vbCrLf
         tmpHTML = tmpHTML + "<td>" & strCreateDate & "</td>" & vbCrLf
         tmpHTML = tmpHTML + "</tr>" & vbCrLf
         tmpHTML = tmpHTML + "</table>" & vbCrLf
@@ -349,7 +367,7 @@ Public Function GenerateHTML(strSendOrRec As String, _
         tmpHTML = tmpHTML + "<td><b>Create Date:</b></td>" & vbCrLf
         tmpHTML = tmpHTML + "</tr>" & vbCrLf
         tmpHTML = tmpHTML + "<tr>" & vbCrLf
-        tmpHTML = tmpHTML + "<td>" & strCreator & "</td>" & vbCrLf
+        tmpHTML = tmpHTML + "<td>" & GetFullName(strCreator) & "</td>" & vbCrLf
         tmpHTML = tmpHTML + "<td>" & strCreateDate & "</td>" & vbCrLf
         tmpHTML = tmpHTML + "</tr>" & vbCrLf
         tmpHTML = tmpHTML + "</table>" & vbCrLf
@@ -358,11 +376,15 @@ Public Function GenerateHTML(strSendOrRec As String, _
         tmpHTML = tmpHTML + " </HTML>" & vbCrLf
         GenerateHTML = tmpHTML
     End If
-    '  Exit Function
-    'errs:
-    '    Debug.Print Err.Number
+    Exit Function
+errs:
+    ' Debug.Print Err.Number
+    ToLog "Failed to Genterate HTML!"
+    If bolVerbose Then ToLog "ERROR DTL:  SUB = GenerateHTML | " & Err.Number & " - " & Err.Description
 End Function
 Public Sub CheckQueue()
+    On Error GoTo errs
+    Dim tmpGUID As String
     Dim rs      As New ADODB.Recordset
     Dim strSQL1 As String
     cn_global.CursorLocation = adUseClient
@@ -376,6 +398,8 @@ Public Sub CheckQueue()
     ReDim EmailData(rs.RecordCount)
     Do Until rs.EOF
         With rs
+            tmpGUID = .Fields(5)
+            EmailData(.AbsolutePosition - 1).GUID = tmpGUID
             EmailData(.AbsolutePosition - 1).SendOrRec = !idSendOrRec
             EmailData(.AbsolutePosition - 1).strFrom = !idFrom
             EmailData(.AbsolutePosition - 1).strTo = !idTo
@@ -386,14 +410,23 @@ Public Sub CheckQueue()
             EmailData(.AbsolutePosition - 1).Creator = !idCreator
             EmailData(.AbsolutePosition - 1).CreateDate = !idCreateDate
             EmailData(.AbsolutePosition - 1).Description = !idDescription
-            EmailData(.AbsolutePosition - 1).GUID = .Fields(5)
             .MoveNext
         End With
     Loop
     rs.Close
     SendEmails
     ClearEmailQueue
-End Sub
+    Exit Sub
+errs:
+    ' Debug.Print Err.Number
+    ToLog "Error Checking Queue!"
+    If bolVerbose Then ToLog "ERROR DTL:  SUB = CheckQueue | " & Err.Number & " - " & Err.Description
+    If Err.Number = 94 Then
+        ToLog "Null values detected! Packet data missing. Clearing single item from queue."
+        ClearEmailQueue tmpGUID
+        End If
+        
+    End Sub
 Public Sub ToLog(Message As String)
     Dim tmpMsg As String
     If Dir$(strLogLoc) = "" Then MkDir Environ$("APPDATA") & "\JPTRS\"
@@ -406,29 +439,51 @@ Public Sub ToLog(Message As String)
     End With
 End Sub
 Public Sub SendEmails()
+    On Error GoTo errs
     Dim i As Integer
     For i = 0 To UBound(EmailData) - 1
         If bolVerbose Then ToLog "Sending SMTP: " & EmailData(i).SendOrRec & " - " & EmailData(i).strFrom & " - " & EmailData(i).strTo & " - " & EmailData(i).JobNum & " - " & EmailData(i).Description & " - " & EmailData(i).PartNum & " - " & EmailData(i).Customer & " - " & EmailData(i).Creator & " - " & EmailData(i).CreateDate & " - " & EmailData(i).Comment
         JPTRS.lblStatus.Caption = "Sending EMail...."
         SendNotification EmailData(i).SendOrRec, EmailData(i).strFrom, EmailData(i).strTo, EmailData(i).JobNum, EmailData(i).Description, EmailData(i).PartNum, EmailData(i).Customer, EmailData(i).Creator, EmailData(i).CreateDate, EmailData(i).Comment
     Next
+    Exit Sub
+errs:
+    ' Debug.Print Err.Number
+    ToLog "Error Sending Emails!"
+    ToLog "ERROR DTL:  SUB = SendEmails | " & Err.Number & " - " & Err.Description
 End Sub
-Public Sub ClearEmailQueue()
+Public Sub ClearEmailQueue(Optional strGUID As String)
+    On Error GoTo errs
     Dim i       As Integer
     Dim rs      As New ADODB.Recordset
     Dim strSQL1 As String
     cn_global.CursorLocation = adUseClient
-   If bolVerbose Then ToLog "Clearing Queue..."
-    For i = 0 To UBound(EmailData) - 1
-        strSQL1 = "SELECT * From emailqueue Where idGUID = '" & EmailData(i).GUID & "'"
-        JPTRS.lblStatus.Caption = "Clearing Queue..."
-        
+    If strGUID = "" And UBound(EmailData) - 1 > 1 Then
+        If bolVerbose Then ToLog "Clearing Queue..."
+        For i = 0 To UBound(EmailData) - 1
+            strSQL1 = "SELECT * From emailqueue Where idGUID = '" & EmailData(i).GUID & "'"
+            JPTRS.lblStatus.Caption = "Clearing Queue..."
+            rs.Open strSQL1, cn_global, adOpenKeyset, adLockOptimistic
+            With rs
+                .Delete
+                .Update
+            End With
+            rs.Close
+        Next i
+        ReDim EmailData(0)
+    Else
+        If bolVerbose Then ToLog "Clearing GUID " & strGUID & " from Queue..."
+        strSQL1 = "SELECT * From emailqueue Where idGUID = '" & strGUID & "'"
         rs.Open strSQL1, cn_global, adOpenKeyset, adLockOptimistic
         With rs
             .Delete
             .Update
         End With
         rs.Close
-    Next i
-    ReDim EmailData(0)
+    End If
+    Exit Sub
+errs:
+    ' Debug.Print Err.Number
+    ToLog "Error Clearing Queue!"
+    ToLog "ERROR DTL:  SUB = ClearEmailQueue | " & Err.Number & " - " & Err.Description
 End Sub

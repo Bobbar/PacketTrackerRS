@@ -65,7 +65,6 @@ Public Type ReportInfo
     Creator As String
     CreateDate As String
     Color As Long
-    
 End Type
 Public ReportData()   As ReportInfo
 Public EmailData()    As EmailInfo
@@ -102,8 +101,21 @@ Public Declare Function Shell_NotifyIcon _
 Public Const strDBDateFormat   As String = "YYYY-MM-DD"
 Public Const strUserDateFormat As String = "MM/DD/YYYY"
 Public strReportHTML           As String
-Public dtStartDate As Date, dtEndDate As Date
+Public dtStartDate             As Date, dtEndDate As Date
+Public Declare Sub Sleep Lib "kernel32.dll" (ByVal dwMilliseconds As Long)
+Public Declare Function GetTickCount Lib "kernel32" () As Long
+Public Const DayToRun           As Long = vbMonday
+Public Const MinutesTillRefresh As Long = 60 'Minutes until user list refresh * 2  (60 = 30)
+Public MinsCounted              As Long
 
+Public Sub Wait(ByVal DurationMS As Long)
+    Dim EndTime As Long
+    EndTime = GetTickCount + DurationMS
+    Do While EndTime > GetTickCount
+        DoEvents
+        Sleep 1
+    Loop
+End Sub
 Public Sub GetUserIndex()
     Dim rs      As New ADODB.Recordset
     Dim strSQL1 As String
@@ -142,6 +154,7 @@ Public Function GetFullName(strUsername As String) As String
     Next i
 End Function
 Public Sub FindMySQLDriver()
+    ToLog "Scanning for MySQL Driver..."
     GetODBCDrivers
     Dim i           As Integer
     Dim strPossis() As String
@@ -159,6 +172,7 @@ Public Sub FindMySQLDriver()
     Else
         strSQLDriver = strPossis(0)
     End If
+    ToLog "MySQL Driver = " & strSQLDriver
 End Sub
 Function EnumRegistryValues(ByVal hKey As Long, ByVal KeyName As String) As Collection
     Dim handle            As Long
@@ -505,13 +519,13 @@ errs:
     ToLog "ERROR DTL:  SUB = ClearEmailQueue | " & Err.Number & " - " & Err.Description
 End Sub
 Public Sub WeeklyReportGetData()
-    
-    Dim i           As Integer
-    Dim rs          As New ADODB.Recordset
-    Dim strSQL1     As String
+    Dim i       As Integer
+    Dim rs      As New ADODB.Recordset
+    Dim strSQL1 As String
     i = 0
     cn_global.CursorLocation = adUseClient
     strSQL1 = "SELECT * FROM packetlist d LEFT JOIN packetentrydb c ON c.idJobNum = d.idJobNum WHERE idDate = (SELECT MAX(idDate) FROM packetentrydb c2 Where c2.idJobNum = d.idJobNum) AND idStatus='OPEN' ORDER BY idDate DESC LIMIT 50"
+    ToLog "Starting Weekly Report..."
     Set rs = cn_global.Execute(strSQL1)
     dtStartDate = DateAdd("d", -7, DateTime.Date)
     dtEndDate = DateAdd("d", -3, DateTime.Date)
@@ -519,19 +533,19 @@ Public Sub WeeklyReportGetData()
     ReDim ReportData(0)
     With rs
         Do Until .EOF
-            If !idDate >= dtStartDate And !idDate <= dtEndDate Then
+            If Format(!idDate, strUserDateFormat) >= dtStartDate And Format(!idDate, strUserDateFormat) <= dtEndDate Then
                 If !idAction = "CREATED" Then
-                ReportData(i).Color = colCreate
+                    ReportData(i).Color = colCreate
                 ElseIf !idAction = "INTRANSIT" Then
-                ReportData(i).Color = colInTransit
+                    ReportData(i).Color = colInTransit
                 ElseIf !idAction = "RECEIVED" Then
-                ReportData(i).Color = colReceived
+                    ReportData(i).Color = colReceived
                 ElseIf !idAction = "CLOSED" Then
-                ReportData(i).Color = colClosed
+                    ReportData(i).Color = colClosed
                 ElseIf !idStatus = "OPEN" And !idAction = "FILED" Then
-                ReportData(i).Color = colFiled
+                    ReportData(i).Color = colFiled
                 ElseIf !idAction = "REOPENED" Then
-                ReportData(i).Color = colReopened
+                    ReportData(i).Color = colReopened
                 End If
                 ReportData(i).Action = !idAction
                 ReportData(i).ActionDate = !idDate
@@ -547,41 +561,50 @@ Public Sub WeeklyReportGetData()
             .MoveNext
         Loop
     End With
-    
     'WeeklyReportParseCSV
     WeeklyReportParseHTML
-    SendReport "JPTReportServer@worthingtonindustries.com", "BOBBY.LOVELL@worthingtonindustries.com"
-    
-    
-    
+    SendReport "JPTReportServer@worthingtonindustries.com", ReportRecpts
 End Sub
 Public Sub WeeklyReportParseHTML()
+    On Error GoTo errs
+    ToLog "Parsing report to HTML..."
     Dim tmpHTML As String
     Dim i       As Integer
     tmpHTML = tmpHTML + "<FONT STYLE=font-family:Tahoma;>" & vbCrLf
     tmpHTML = tmpHTML + "<FONT SIZE=4><U>Weekly Job Packet Report</U></FONT><BR>" & vbCrLf
     tmpHTML = tmpHTML + "<FONT SIZE=2> Report Date: " & dtStartDate & " to " & dtEndDate & "</FONT><BR><BR>" & vbCrLf
     tmpHTML = tmpHTML + "<table border=1 cellpadding=2>" & vbCrLf
+    tmpHTML = tmpHTML + "<tr>" & vbCrLf
+    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Action</th>" & vbCrLf
+    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Job Num</th>" & vbCrLf
+    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Description</th>" & vbCrLf
+    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Customer</th>" & vbCrLf
+    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Part Num</th>" & vbCrLf
+    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Create Date</th>" & vbCrLf
+    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Creator</th>" & vbCrLf
+    tmpHTML = tmpHTML + "</tr>"
     For i = 0 To UBound(ReportData) - 1
         tmpHTML = tmpHTML + "<tr>" & vbCrLf
         tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).Action & "</td>" & vbCrLf
         tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).JobNum & "</td>" & vbCrLf
-         tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).Description & "</td>" & vbCrLf
-         tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).Customer & "</td>" & vbCrLf
-          tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).Part & "</td>" & vbCrLf
+        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).Description & "</td>" & vbCrLf
+        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).Customer & "</td>" & vbCrLf
+        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).Part & "</td>" & vbCrLf
         tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).CreateDate & "</td>" & vbCrLf
-          tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).Creator & "</td>" & vbCrLf
-          tmpHTML = tmpHTML + "</tr>"
+        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & GetFullName(ReportData(i).Creator) & "</td>" & vbCrLf
+        tmpHTML = tmpHTML + "</tr>"
     Next
     tmpHTML = tmpHTML + "</table>"
-    
-    
     strReportHTML = tmpHTML
-    
     'Debug.Print strReportHTML
-    
+    Exit Sub
+errs:
+    ' Debug.Print Err.Number
+    ToLog "Failed while parsing Weekly Report HTML!"
+    If bolVerbose Then ToLog "ERROR DTL:  SUB =  WeeklyReportParseHTML | " & Err.Number & " - " & Err.Description
 End Sub
 Public Sub SendReport(MailFrom As String, MailTo As String)
+    ToLog "Sending Weekly Report..."
     On Error GoTo errs
     Dim iConf As New CDO.Configuration
     Dim Flds  As ADODB.Fields
@@ -605,13 +628,67 @@ Public Sub SendReport(MailFrom As String, MailTo As String)
     Set iMsg = Nothing
     Set iConf = Nothing
     Set Flds = Nothing
+    'Set registry flag telling me that the report for this week has been sent
+    SaveSetting App.EXEName, "WeeklyReportSent", "Sent", "TRUE"
+    ToLog "Report Sent..."
     Exit Sub
 errs:
     ' Debug.Print Err.Number
     ToLog "Failed to send Weekly Report!"
     If bolVerbose Then ToLog "ERROR DTL:  SUB = SendReport | " & Err.Number & " - " & Err.Description
 End Sub
+Public Function ReportRecpts() As String
+    ReportRecpts = ""
+    Dim tmpRecpts As String
+    Dim rs        As New ADODB.Recordset
+    Dim strSQL1   As String
+    cn_global.CursorLocation = adUseClient
+    strSQL1 = "SELECT * FROM users WHERE idJPTReport = '1'"
+    Set rs = cn_global.Execute(strSQL1)
+    With rs
+        Do Until .EOF
+            tmpRecpts = tmpRecpts + !idEmail + ";"
+            .MoveNext
+        Loop
+    End With
+    ReportRecpts = tmpRecpts
+End Function
+Public Function OKToRun() As Boolean
+    Dim Flag As Boolean
+    Flag = CBool(GetSetting(App.EXEName, "WeeklyReportSent", "Sent", 0))
+    OKToRun = False
+    If Weekday(Now) = DayToRun And Flag Then
+        OKToRun = False
+    ElseIf Weekday(Now) <> DayToRun And Flag Then
+        OKToRun = False
+        SaveSetting App.EXEName, "WeeklyReportSent", "Sent", "FALSE"
+    ElseIf Weekday(Now) <> DayToRun And Not Flag Then
+        OKToRun = False
+    ElseIf Weekday(Now) = DayToRun And Not Flag Then
+        OKToRun = True
+    End If
+    JPTRS.lblReportStatus.Caption = Str(Flag)
+End Function
+Public Function strDayOfWeek(intDayOfWeek As Integer) As String
+    Select Case intDayOfWeek
+        Case 1
+            strDayOfWeek = "Sunday"
+        Case 2
+            strDayOfWeek = "Monday"
+        Case 3
+            strDayOfWeek = "Tuesday"
+        Case 4
+            strDayOfWeek = "Wednesday"
+        Case 5
+            strDayOfWeek = "Thursday"
+        Case 6
+            strDayOfWeek = "Friday"
+        Case 7
+            strDayOfWeek = "Saturday"
+    End Select
+End Function
 Public Sub WeeklyReportParseCSV()
+    On Error GoTo errs
     Dim strCSVName As String, strCSVFullName As String
     Dim i          As Integer
     strCSVName = Format$(DateTime.Date & " " & DateTime.Time, "YYYY-MM-DD-hh-mm-ss") & ".csv"
@@ -622,4 +699,9 @@ Public Sub WeeklyReportParseCSV()
         Print #2, ReportData(i).Action & "," & ReportData(i).JobNum & "," & ReportData(i).Description & "," & ReportData(i).Customer & "," & ReportData(i).JobNum & "," & ReportData(i).Creator & "," & ReportData(i).CreateDate
     Next
     Close #2
+    Exit Sub
+errs:
+    ' Debug.Print Err.Number
+    ToLog "Failed while parsing Weekly Report!"
+    If bolVerbose Then ToLog "ERROR DTL:  SUB = WeeklyReportParseCSV | " & Err.Number & " - " & Err.Description
 End Sub

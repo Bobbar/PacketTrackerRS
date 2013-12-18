@@ -23,20 +23,22 @@ Begin VB.Form JPTRS
    ScaleHeight     =   5235
    ScaleWidth      =   8370
    StartUpPosition =   1  'CenterOwner
-   Begin VB.CommandButton cmdCommand1 
-      Caption         =   "Command1"
-      Height          =   360
-      Left            =   1020
-      TabIndex        =   7
-      Top             =   960
-      Width           =   990
+   Begin VB.Timer tmrRefresher 
+      Interval        =   30000
+      Left            =   7560
+      Top             =   1080
+   End
+   Begin VB.Timer tmrReportClock 
+      Interval        =   3000
+      Left            =   7560
+      Top             =   600
    End
    Begin VB.CommandButton cmdSendToTray 
       Caption         =   "Minimize To Tray"
       Height          =   480
       Left            =   7020
       TabIndex        =   4
-      Top             =   1560
+      Top             =   1620
       Width           =   990
    End
    Begin VB.CheckBox chkVerbose 
@@ -58,7 +60,105 @@ Begin VB.Form JPTRS
    Begin VB.Timer tmrCheckQueue 
       Interval        =   2000
       Left            =   7560
-      Top             =   240
+      Top             =   120
+   End
+   Begin VB.Label lblCurDay 
+      AutoSize        =   -1  'True
+      BackStyle       =   0  'Transparent
+      Caption         =   "%CUR DAY%"
+      Height          =   195
+      Left            =   6240
+      TabIndex        =   13
+      Top             =   960
+      Width           =   990
+   End
+   Begin VB.Label lblCurDayLBL 
+      AutoSize        =   -1  'True
+      BackStyle       =   0  'Transparent
+      Caption         =   "Current Day:"
+      BeginProperty Font 
+         Name            =   "Tahoma"
+         Size            =   8.25
+         Charset         =   0
+         Weight          =   700
+         Underline       =   0   'False
+         Italic          =   0   'False
+         Strikethrough   =   0   'False
+      EndProperty
+      Height          =   195
+      Left            =   5040
+      TabIndex        =   12
+      Top             =   960
+      Width           =   1065
+   End
+   Begin VB.Label lblRptDay 
+      AutoSize        =   -1  'True
+      BackStyle       =   0  'Transparent
+      Caption         =   "%RPT DAY%"
+      Height          =   195
+      Left            =   6240
+      TabIndex        =   11
+      Top             =   720
+      Width           =   960
+   End
+   Begin VB.Label lblDayLBL 
+      AutoSize        =   -1  'True
+      BackStyle       =   0  'Transparent
+      Caption         =   "Report Day:"
+      BeginProperty Font 
+         Name            =   "Tahoma"
+         Size            =   8.25
+         Charset         =   0
+         Weight          =   700
+         Underline       =   0   'False
+         Italic          =   0   'False
+         Strikethrough   =   0   'False
+      EndProperty
+      Height          =   195
+      Left            =   5100
+      TabIndex        =   10
+      Top             =   720
+      Width           =   1065
+   End
+   Begin VB.Label lblReportStatus 
+      AutoSize        =   -1  'True
+      BackStyle       =   0  'Transparent
+      Caption         =   "%FLAG%"
+      Height          =   195
+      Left            =   6180
+      TabIndex        =   9
+      Top             =   480
+      Width           =   705
+   End
+   Begin VB.Label lblReportSent 
+      AutoSize        =   -1  'True
+      BackStyle       =   0  'Transparent
+      Caption         =   "Report Sent:"
+      BeginProperty Font 
+         Name            =   "Tahoma"
+         Size            =   8.25
+         Charset         =   0
+         Weight          =   700
+         Underline       =   0   'False
+         Italic          =   0   'False
+         Strikethrough   =   0   'False
+      EndProperty
+      Height          =   195
+      Left            =   5040
+      TabIndex        =   8
+      Top             =   480
+      Width           =   1065
+   End
+   Begin VB.Label lblTime 
+      Alignment       =   2  'Center
+      AutoSize        =   -1  'True
+      BackStyle       =   0  'Transparent
+      Caption         =   "Time"
+      Height          =   195
+      Left            =   3840
+      TabIndex        =   7
+      Top             =   1860
+      Width           =   330
    End
    Begin VB.Label lblCodedBy 
       AutoSize        =   -1  'True
@@ -105,25 +205,25 @@ Begin VB.Form JPTRS
       BackStyle       =   0  'Transparent
       Caption         =   "Status:"
       Height          =   195
-      Left            =   3300
+      Left            =   3480
       TabIndex        =   3
-      Top             =   1800
+      Top             =   1560
       Width           =   525
    End
    Begin VB.Label lblStatus 
       BackStyle       =   0  'Transparent
       Caption         =   "_________"
       Height          =   195
-      Left            =   3900
+      Left            =   4080
       TabIndex        =   2
-      Top             =   1800
+      Top             =   1560
       Width           =   1410
    End
    Begin VB.Image Image1 
       Height          =   1335
       Left            =   3360
       Picture         =   "JPTRS.frx":08CA
-      Top             =   300
+      Top             =   120
       Width           =   1350
    End
 End
@@ -147,9 +247,11 @@ Sub minimize_to_tray()
 End Sub
 
 Private Sub cmdCommand1_Click()
-WeeklyReportGetData
+    Debug.Print ReportRecpts
+End Sub
 
-
+Private Sub Command1_Click()
+    WeeklyReportGetData
 End Sub
 
 Private Sub Form_MouseMove(Button As Integer, Shift As Integer, x As Single, y As Single)
@@ -182,18 +284,25 @@ Private Sub Form_Load()
     bolVerbose = CBool(chkVerbose.Value)
     strLogLoc = Environ$("APPDATA") & "\JPTRS\LOG.LOG"
     strCSVLoc = Environ$("APPDATA") & "\JPTRS\"
+    ToLog "Initializing..."
     FindMySQLDriver
+    ToLog "Starting Global ADO Connection..."
+    If bolVerbose Then ToLog "uid=" & strUsername & ";pwd=" & strPassword & ";server=" & strServerAddress & ";" & "driver={" & strSQLDriver & "};database=TicketDB;dsn=;"
     cn_global.Open "uid=" & strUsername & ";pwd=" & strPassword & ";server=" & strServerAddress & ";" & "driver={" & strSQLDriver & "};database=TicketDB;dsn=;"
+    ToLog "Getting User List..."
     GetUserIndex
-   ' minimize_to_tray
+    minimize_to_tray
 End Sub
 
 Private Sub Form_QueryUnload(Cancel As Integer, UnloadMode As Integer)
     Dim blah
     blah = MsgBox("Are you sure you want to close the server!", vbOKCancel, "Are you sure?!")
     If blah = vbOK Then
+        ToLog "Closing Server Application..."
         cn_global.Close
+        ToLog "Global ADO Connection Closed..."
         Unload Me
+        ToLog "Unloaded Form..."
         End
     Else
         Cancel = True
@@ -207,4 +316,25 @@ End Sub
 Private Sub tmrCheckQueue_Timer()
     JPTRS.lblStatus.Caption = "Idle..."
     CheckQueue
+End Sub
+
+Private Sub tmrReportClock_Timer()
+    lblTime = Now
+    If OKToRun Then WeeklyReportGetData
+    lblRptDay.Caption = strDayOfWeek(DayToRun)
+    lblCurDay.Caption = strDayOfWeek(Weekday(Now))
+End Sub
+
+Private Sub tmrRefresher_Timer()
+    MinsCounted = MinsCounted + 1
+    If MinsCounted >= MinutesTillRefresh Then
+        tmrCheckQueue.Enabled = False
+        tmrReportClock.Enabled = False
+        Wait 5
+        GetUserIndex
+        tmrCheckQueue.Enabled = True
+        tmrReportClock.Enabled = True
+        MinsCounted = 0
+    Else
+    End If
 End Sub

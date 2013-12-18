@@ -3,9 +3,9 @@ Option Explicit
 Global cn_global              As New ADODB.Connection
 Public Const colCreate        As Long = &H80C0FF
 Public Const colInTransit     As Long = &H80FF80
-Public Const colReceived      As Long = &H80FFFF
+Public Const colReceived      As Long = &HF4FF80 '&H80FFFF
 Public Const colClosed        As Long = &H8080FF
-Public Const colFiled         As Long = &HFF8080
+Public Const colFiled         As Long = &H8587FF '&HFF8080
 Public Const colReopened      As Long = &HFF80FF
 Public Const strServerAddress As String = "10.35.1.40"
 Public Const strUsername      As String = "TicketApp"
@@ -55,10 +55,24 @@ Public Type EmailInfo
     CreateDate As String
     GUID As String
 End Type
+Public Type ReportInfo
+    Action As String
+    JobNum As String
+    Description As String
+    Customer As String
+    Part As String
+    ActionDate As String
+    Creator As String
+    CreateDate As String
+    Color As Long
+    
+End Type
+Public ReportData()   As ReportInfo
 Public EmailData()    As EmailInfo
 Public strUserIndex() As String
 Public bolVerbose     As Boolean
 Public strLogLoc      As String
+Public strCSVLoc      As String
 Public Type NOTIFYICONDATA
     cbSize As Long
     hwnd As Long
@@ -85,6 +99,10 @@ Public Declare Function Shell_NotifyIcon _
                Lib "shell32" _
                Alias "Shell_NotifyIconA" (ByVal dwMessage As Long, _
                                           pnid As NOTIFYICONDATA) As Boolean
+Public Const strDBDateFormat   As String = "YYYY-MM-DD"
+Public Const strUserDateFormat As String = "MM/DD/YYYY"
+Public strReportHTML           As String
+Public dtStartDate As Date, dtEndDate As Date
 
 Public Sub GetUserIndex()
     Dim rs      As New ADODB.Recordset
@@ -424,9 +442,8 @@ errs:
     If Err.Number = 94 Then
         ToLog "Null values detected! Packet data missing. Clearing single item from queue."
         ClearEmailQueue tmpGUID
-        End If
-        
-    End Sub
+    End If
+End Sub
 Public Sub ToLog(Message As String)
     Dim tmpMsg As String
     If Dir$(strLogLoc) = "" Then MkDir Environ$("APPDATA") & "\JPTRS\"
@@ -458,7 +475,7 @@ Public Sub ClearEmailQueue(Optional strGUID As String)
     Dim rs      As New ADODB.Recordset
     Dim strSQL1 As String
     cn_global.CursorLocation = adUseClient
-    If strGUID = "" And UBound(EmailData) - 1 > 1 Then
+    If strGUID = "" Then
         If bolVerbose Then ToLog "Clearing Queue..."
         For i = 0 To UBound(EmailData) - 1
             strSQL1 = "SELECT * From emailqueue Where idGUID = '" & EmailData(i).GUID & "'"
@@ -486,4 +503,123 @@ errs:
     ' Debug.Print Err.Number
     ToLog "Error Clearing Queue!"
     ToLog "ERROR DTL:  SUB = ClearEmailQueue | " & Err.Number & " - " & Err.Description
+End Sub
+Public Sub WeeklyReportGetData()
+    
+    Dim i           As Integer
+    Dim rs          As New ADODB.Recordset
+    Dim strSQL1     As String
+    i = 0
+    cn_global.CursorLocation = adUseClient
+    strSQL1 = "SELECT * FROM packetlist d LEFT JOIN packetentrydb c ON c.idJobNum = d.idJobNum WHERE idDate = (SELECT MAX(idDate) FROM packetentrydb c2 Where c2.idJobNum = d.idJobNum) AND idStatus='OPEN' ORDER BY idDate DESC LIMIT 50"
+    Set rs = cn_global.Execute(strSQL1)
+    dtStartDate = DateAdd("d", -7, DateTime.Date)
+    dtEndDate = DateAdd("d", -3, DateTime.Date)
+    If rs.RecordCount < 1 Then Exit Sub
+    ReDim ReportData(0)
+    With rs
+        Do Until .EOF
+            If !idDate >= dtStartDate And !idDate <= dtEndDate Then
+                If !idAction = "CREATED" Then
+                ReportData(i).Color = colCreate
+                ElseIf !idAction = "INTRANSIT" Then
+                ReportData(i).Color = colInTransit
+                ElseIf !idAction = "RECEIVED" Then
+                ReportData(i).Color = colReceived
+                ElseIf !idAction = "CLOSED" Then
+                ReportData(i).Color = colClosed
+                ElseIf !idStatus = "OPEN" And !idAction = "FILED" Then
+                ReportData(i).Color = colFiled
+                ElseIf !idAction = "REOPENED" Then
+                ReportData(i).Color = colReopened
+                End If
+                ReportData(i).Action = !idAction
+                ReportData(i).ActionDate = !idDate
+                ReportData(i).CreateDate = !idCreateDate
+                ReportData(i).Creator = !idCreator
+                ReportData(i).Customer = !idCustPONum
+                ReportData(i).Description = !idDescription
+                ReportData(i).JobNum = !idJobNum
+                ReportData(i).Part = !idPartNum
+                i = i + 1
+                ReDim Preserve ReportData(UBound(ReportData) + 1)
+            End If
+            .MoveNext
+        Loop
+    End With
+    
+    'WeeklyReportParseCSV
+    WeeklyReportParseHTML
+    SendReport "JPTReportServer@worthingtonindustries.com", "BOBBY.LOVELL@worthingtonindustries.com"
+    
+    
+    
+End Sub
+Public Sub WeeklyReportParseHTML()
+    Dim tmpHTML As String
+    Dim i       As Integer
+    tmpHTML = tmpHTML + "<FONT STYLE=font-family:Tahoma;>" & vbCrLf
+    tmpHTML = tmpHTML + "<FONT SIZE=4><U>Weekly Job Packet Report</U></FONT><BR>" & vbCrLf
+    tmpHTML = tmpHTML + "<FONT SIZE=2> Report Date: " & dtStartDate & " to " & dtEndDate & "</FONT><BR><BR>" & vbCrLf
+    tmpHTML = tmpHTML + "<table border=1 cellpadding=2>" & vbCrLf
+    For i = 0 To UBound(ReportData) - 1
+        tmpHTML = tmpHTML + "<tr>" & vbCrLf
+        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).Action & "</td>" & vbCrLf
+        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).JobNum & "</td>" & vbCrLf
+         tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).Description & "</td>" & vbCrLf
+         tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).Customer & "</td>" & vbCrLf
+          tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).Part & "</td>" & vbCrLf
+        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).CreateDate & "</td>" & vbCrLf
+          tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).Creator & "</td>" & vbCrLf
+          tmpHTML = tmpHTML + "</tr>"
+    Next
+    tmpHTML = tmpHTML + "</table>"
+    
+    
+    strReportHTML = tmpHTML
+    
+    'Debug.Print strReportHTML
+    
+End Sub
+Public Sub SendReport(MailFrom As String, MailTo As String)
+    On Error GoTo errs
+    Dim iConf As New CDO.Configuration
+    Dim Flds  As ADODB.Fields
+    Dim iMsg  As New CDO.Message
+    Set Flds = iConf.Fields
+    ' Set the configuration
+    Flds(cdoSendUsingMethod) = cdoSendUsingPort
+    Flds(cdoSMTPServer) = "mx.wthg.com"
+    ' ... other settings
+    Flds.Update
+    With iMsg
+        Set .Configuration = iConf
+        .Sender = MailFrom 'GetEmail(MailFrom)
+        .To = MailTo 'GetEmail(MailTo)
+        .From = MailFrom 'GetEmail(MailFrom)
+        .Subject = "JPT: Weekly Report (" & dtStartDate & " to " & dtEndDate & ")"
+        .HTMLBody = strReportHTML
+        '.TextBody = Message
+        .Send
+    End With
+    Set iMsg = Nothing
+    Set iConf = Nothing
+    Set Flds = Nothing
+    Exit Sub
+errs:
+    ' Debug.Print Err.Number
+    ToLog "Failed to send Weekly Report!"
+    If bolVerbose Then ToLog "ERROR DTL:  SUB = SendReport | " & Err.Number & " - " & Err.Description
+End Sub
+Public Sub WeeklyReportParseCSV()
+    Dim strCSVName As String, strCSVFullName As String
+    Dim i          As Integer
+    strCSVName = Format$(DateTime.Date & " " & DateTime.Time, "YYYY-MM-DD-hh-mm-ss") & ".csv"
+    strCSVFullName = strCSVLoc & strCSVName
+    Debug.Print strCSVFullName
+    Open strCSVFullName For Append As #2
+    For i = 0 To UBound(ReportData)
+        Print #2, ReportData(i).Action & "," & ReportData(i).JobNum & "," & ReportData(i).Description & "," & ReportData(i).Customer & "," & ReportData(i).JobNum & "," & ReportData(i).Creator & "," & ReportData(i).CreateDate
+    Next
+    Close #2
 End Sub

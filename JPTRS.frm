@@ -23,6 +23,14 @@ Begin VB.Form JPTRS
    ScaleHeight     =   5235
    ScaleWidth      =   8370
    StartUpPosition =   1  'CenterOwner
+   Begin VB.CommandButton cmdCommand1 
+      Caption         =   "Command1"
+      Height          =   360
+      Left            =   1020
+      TabIndex        =   7
+      Top             =   960
+      Width           =   990
+   End
    Begin VB.CommandButton cmdSendToTray 
       Caption         =   "Minimize To Tray"
       Height          =   480
@@ -137,6 +145,13 @@ Sub minimize_to_tray()
     nid.szTip = "Click to View" & vbNullChar
     Shell_NotifyIcon NIM_ADD, nid
 End Sub
+
+Private Sub cmdCommand1_Click()
+WeeklyReportGetData
+
+
+End Sub
+
 Private Sub Form_MouseMove(Button As Integer, Shift As Integer, x As Single, y As Single)
     Dim msg     As Long
     Dim sFilter As String
@@ -166,10 +181,11 @@ Private Sub Form_Load()
     lblAPPVERSION.Caption = App.Major & "." & App.Minor & "." & App.Revision
     bolVerbose = CBool(chkVerbose.Value)
     strLogLoc = Environ$("APPDATA") & "\JPTRS\LOG.LOG"
+    strCSVLoc = Environ$("APPDATA") & "\JPTRS\"
     FindMySQLDriver
     cn_global.Open "uid=" & strUsername & ";pwd=" & strPassword & ";server=" & strServerAddress & ";" & "driver={" & strSQLDriver & "};database=TicketDB;dsn=;"
     GetUserIndex
-    minimize_to_tray
+   ' minimize_to_tray
 End Sub
 
 Private Sub Form_QueryUnload(Cancel As Integer, UnloadMode As Integer)

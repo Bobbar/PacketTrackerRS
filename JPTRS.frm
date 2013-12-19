@@ -23,6 +23,15 @@ Begin VB.Form JPTRS
    ScaleHeight     =   5235
    ScaleWidth      =   8370
    StartUpPosition =   1  'CenterOwner
+   Begin VB.CommandButton Command1 
+      Caption         =   "Command1"
+      Height          =   360
+      Left            =   780
+      TabIndex        =   14
+      Top             =   660
+      Visible         =   0   'False
+      Width           =   990
+   End
    Begin VB.Timer tmrRefresher 
       Interval        =   30000
       Left            =   7560
@@ -246,13 +255,7 @@ Sub minimize_to_tray()
     Shell_NotifyIcon NIM_ADD, nid
 End Sub
 
-Private Sub cmdCommand1_Click()
-    Debug.Print ReportRecpts
-End Sub
 
-Private Sub Command1_Click()
-    WeeklyReportGetData
-End Sub
 
 Private Sub Form_MouseMove(Button As Integer, Shift As Integer, x As Single, y As Single)
     Dim msg     As Long

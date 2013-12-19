@@ -7,6 +7,7 @@ Public Const colReceived      As Long = &HF4FF80 '&H80FFFF
 Public Const colClosed        As Long = &H8080FF
 Public Const colFiled         As Long = &H8587FF '&HFF8080
 Public Const colReopened      As Long = &HFF80FF
+Public Const strSMTPServer    As String = "mx.wthg.com"
 Public Const strServerAddress As String = "10.35.1.40"
 Public Const strUsername      As String = "TicketApp"
 Public Const strPassword      As String = "yb4w4"
@@ -57,6 +58,7 @@ Public Type EmailInfo
 End Type
 Public Type ReportInfo
     Action As String
+    TimeInState As String
     JobNum As String
     Description As String
     Customer As String
@@ -65,6 +67,7 @@ Public Type ReportInfo
     Creator As String
     CreateDate As String
     Color As Long
+    Owner As String
 End Type
 Public ReportData()   As ReportInfo
 Public EmailData()    As EmailInfo
@@ -278,7 +281,11 @@ Public Sub SendNotification(SendRec As String, _
     Set Flds = iConf.Fields
     ' Set the configuration
     Flds(cdoSendUsingMethod) = cdoSendUsingPort
-    Flds(cdoSMTPServer) = "mx.wthg.com"
+    Flds(cdoSMTPServer) = strSMTPServer
+    Flds(cdoSMTPServerPort) = 25
+    Flds(cdoSMTPConnectionTimeout) = 30
+    
+    
     ' ... other settings
     Flds.Update
     With iMsg
@@ -464,7 +471,7 @@ Public Sub ToLog(Message As String)
     Open strLogLoc For Append As #1
     With JPTRS
         tmpMsg = DateTime.Date & " " & DateTime.Time & ": " & Message
-        .lstLog.AddItem tmpMsg
+        .lstLog.AddItem tmpMsg, 0
         Print #1, tmpMsg
         Close #1
     End With
@@ -476,6 +483,9 @@ Public Sub SendEmails()
         If bolVerbose Then ToLog "Sending SMTP: " & EmailData(i).SendOrRec & " - " & EmailData(i).strFrom & " - " & EmailData(i).strTo & " - " & EmailData(i).JobNum & " - " & EmailData(i).Description & " - " & EmailData(i).PartNum & " - " & EmailData(i).Customer & " - " & EmailData(i).Creator & " - " & EmailData(i).CreateDate & " - " & EmailData(i).Comment
         JPTRS.lblStatus.Caption = "Sending EMail...."
         SendNotification EmailData(i).SendOrRec, EmailData(i).strFrom, EmailData(i).strTo, EmailData(i).JobNum, EmailData(i).Description, EmailData(i).PartNum, EmailData(i).Customer, EmailData(i).Creator, EmailData(i).CreateDate, EmailData(i).Comment
+        JPTRS.lblStatus.Caption = "Waiting...."
+        ToLog "Waiting..."
+        Wait 10000 'wait to avoid flooding server
     Next
     Exit Sub
 errs:
@@ -519,6 +529,7 @@ errs:
     ToLog "ERROR DTL:  SUB = ClearEmailQueue | " & Err.Number & " - " & Err.Description
 End Sub
 Public Sub WeeklyReportGetData()
+    Dim lngTIS  As Long
     Dim i       As Integer
     Dim rs      As New ADODB.Recordset
     Dim strSQL1 As String
@@ -547,7 +558,21 @@ Public Sub WeeklyReportGetData()
                 ElseIf !idAction = "REOPENED" Then
                     ReportData(i).Color = colReopened
                 End If
-                ReportData(i).Action = !idAction
+                If !idAction = "CREATED" Then
+                    ReportData(i).Action = !idAction & " by " & GetFullName(!idCreator)
+                ElseIf !idAction = "INTRANSIT" Then
+                    ReportData(i).Action = !idAction & " to " & GetFullName(!idUserTo)
+                ElseIf !idAction = "RECEIVED" Then
+                    ReportData(i).Action = !idAction & " by " & GetFullName(!idUserFrom)
+                ElseIf !idAction = "NULL" Then
+                    ReportData(i).Action = "CLOSED by " & GetFullName(!idUser)
+                ElseIf !idStatus = "OPEN" And !idAction = "FILED" Then
+                    ReportData(i).Action = !idAction & " by " & GetFullName(!idUser)
+                ElseIf !idAction = "REOPENED" Then
+                    ReportData(i).Action = !idAction & " by " & GetFullName(!idUser)
+                End If
+                lngTIS = DateDiff("n", !idDate, Date & " " & Time)
+                ReportData(i).TimeInState = (IIf(lngTIS > 1440, Round(lngTIS / 1440, 1) & " days ", Round(lngTIS / 60, 1) & " hrs "))
                 ReportData(i).ActionDate = !idDate
                 ReportData(i).CreateDate = !idCreateDate
                 ReportData(i).Creator = !idCreator
@@ -575,22 +600,24 @@ Public Sub WeeklyReportParseHTML()
     tmpHTML = tmpHTML + "<FONT SIZE=2> Report Date: " & dtStartDate & " to " & dtEndDate & "</FONT><BR><BR>" & vbCrLf
     tmpHTML = tmpHTML + "<table border=1 cellpadding=2>" & vbCrLf
     tmpHTML = tmpHTML + "<tr>" & vbCrLf
-    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Action</th>" & vbCrLf
     tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Job Num</th>" & vbCrLf
+    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Action</th>" & vbCrLf
+    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Action Date</th>" & vbCrLf
+    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Time In State</th>" & vbCrLf
     tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Description</th>" & vbCrLf
     tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Customer</th>" & vbCrLf
-    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Part Num</th>" & vbCrLf
     tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Create Date</th>" & vbCrLf
     tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Creator</th>" & vbCrLf
     tmpHTML = tmpHTML + "</tr>"
     For i = 0 To UBound(ReportData) - 1
         tmpHTML = tmpHTML + "<tr>" & vbCrLf
-        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).Action & "</td>" & vbCrLf
-        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).JobNum & "</td>" & vbCrLf
-        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).Description & "</td>" & vbCrLf
+        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & "><B>" & ReportData(i).JobNum & "</B></td>" & vbCrLf
+        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & "> <font size=2>" & ReportData(i).Action & "</font></td>" & vbCrLf
+        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & "><font size=2>" & ReportData(i).ActionDate & "</font></td>" & vbCrLf
+        tmpHTML = tmpHTML + "<td align=center bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).TimeInState & "</td>" & vbCrLf
+        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & "><font size=2>" & ReportData(i).Description & "</font></td>" & vbCrLf
         tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).Customer & "</td>" & vbCrLf
-        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).Part & "</td>" & vbCrLf
-        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).CreateDate & "</td>" & vbCrLf
+        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & "><font size=2>" & ReportData(i).CreateDate & "</font></td>" & vbCrLf
         tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & GetFullName(ReportData(i).Creator) & "</td>" & vbCrLf
         tmpHTML = tmpHTML + "</tr>"
     Next
@@ -612,7 +639,8 @@ Public Sub SendReport(MailFrom As String, MailTo As String)
     Set Flds = iConf.Fields
     ' Set the configuration
     Flds(cdoSendUsingMethod) = cdoSendUsingPort
-    Flds(cdoSMTPServer) = "mx.wthg.com"
+    Flds(cdoSMTPServer) = strSMTPServer
+    Flds(cdoSMTPConnectionTimeout) = 30
     ' ... other settings
     Flds.Update
     With iMsg

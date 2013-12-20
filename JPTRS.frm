@@ -254,9 +254,6 @@ Sub minimize_to_tray()
     nid.szTip = "Click to View" & vbNullChar
     Shell_NotifyIcon NIM_ADD, nid
 End Sub
-
-
-
 Private Sub Form_MouseMove(Button As Integer, Shift As Integer, x As Single, y As Single)
     Dim msg     As Long
     Dim sFilter As String
@@ -281,7 +278,6 @@ End Sub
 Private Sub cmdSendToTray_Click()
     minimize_to_tray
 End Sub
-
 Private Sub Form_Load()
     lblAPPVERSION.Caption = App.Major & "." & App.Minor & "." & App.Revision
     bolVerbose = CBool(chkVerbose.Value)
@@ -296,7 +292,6 @@ Private Sub Form_Load()
     GetUserIndex
     minimize_to_tray
 End Sub
-
 Private Sub Form_QueryUnload(Cancel As Integer, UnloadMode As Integer)
     Dim blah
     blah = MsgBox("Are you sure you want to close the server!", vbOKCancel, "Are you sure?!")

@@ -55,6 +55,8 @@ Public Type EmailInfo
     Creator As String
     CreateDate As String
     GUID As String
+    Delivered As Boolean
+    TimeStamp As String
 End Type
 Public Type ReportInfo
     Action As String
@@ -273,7 +275,8 @@ Public Sub SendNotification(SendRec As String, _
                             strCustomer As String, _
                             strCreator As String, _
                             strCreateDate As String, _
-                            strComment As String)
+                            strComment As String, _
+                            strTimeStamp As String)
     On Error GoTo errs
     Dim iConf As New CDO.Configuration
     Dim Flds  As ADODB.Fields
@@ -284,8 +287,6 @@ Public Sub SendNotification(SendRec As String, _
     Flds(cdoSMTPServer) = strSMTPServer
     Flds(cdoSMTPServerPort) = 25
     Flds(cdoSMTPConnectionTimeout) = 30
-    
-    
     ' ... other settings
     Flds.Update
     With iMsg
@@ -298,7 +299,7 @@ Public Sub SendNotification(SendRec As String, _
         ElseIf UCase$(SendRec) = "REC" Then
             .Subject = "JPT: " & GetFullName(MailFrom) & " received a packet  (" & JobNum & ")"
         End If
-        .HTMLBody = GenerateHTML(SendRec, GetFullName(MailFrom), MailTo, JobNum, strDescrip, strPartNum, strCustomer, strCreator, strCreateDate, strComment)
+        .HTMLBody = GenerateHTML(SendRec, GetFullName(MailFrom), MailTo, JobNum, strDescrip, strPartNum, strCustomer, strCreator, strCreateDate, strComment, strTimeStamp)
         '.TextBody = Message
         .Send
     End With
@@ -310,6 +311,13 @@ errs:
     ' Debug.Print Err.Number
     ToLog "Failed to send EMail notification!"
     If bolVerbose Then ToLog "ERROR DTL:  SUB = SendNotification | " & Err.Number & " - " & Err.Description
+    If Err.Number = -2147220973 Then 'if failed to connect then clear successful deliveries and try again
+        ClearEmailQueue
+        CheckQueue
+    End If
+    If Err.Number = -2147220974 Then 'if lost connection, the email still made it, so fail softly and continue
+        Resume Next
+    End If
 End Sub
 Public Function GenerateHTML(strSendOrRec As String, _
                              strFrom As String, _
@@ -320,7 +328,8 @@ Public Function GenerateHTML(strSendOrRec As String, _
                              strCustomer As String, _
                              strCreator As String, _
                              strCreateDate As String, _
-                             strComment As String) As String
+                             strComment As String, _
+                             strTimeStamp As String) As String
     On Error GoTo errs
     Dim tmpHTML As String
     If UCase$(strSendOrRec) = "SEND" Then
@@ -329,7 +338,7 @@ Public Function GenerateHTML(strSendOrRec As String, _
         tmpHTML = tmpHTML + "<HTML>" & vbCrLf
         tmpHTML = tmpHTML + "<BODY BGCOLOR=" & BackColor & ">" & vbCrLf
         tmpHTML = tmpHTML + "<FONT STYLE=font-family:Tahoma;>" & vbCrLf
-        tmpHTML = tmpHTML + "<FONT SIZE=2>" & DateTime.Date$ & " " & DateTime.Time$ & "</FONT><BR>"
+        tmpHTML = tmpHTML + "<FONT SIZE=2>" & strTimeStamp & "</FONT><BR>"
         tmpHTML = tmpHTML + "<FONT SIZE=6><U>Message from Job Packet Tracker:</U></FONT><BR><BR>" & vbCrLf
         tmpHTML = tmpHTML + strFrom & " is sending Job Packet <b>" & strPacketNum & "</b> to you. <BR><BR>" & vbCrLf
         If strComment <> "" Then
@@ -449,6 +458,8 @@ Public Sub CheckQueue()
             EmailData(.AbsolutePosition - 1).Creator = !idCreator
             EmailData(.AbsolutePosition - 1).CreateDate = !idCreateDate
             EmailData(.AbsolutePosition - 1).Description = !idDescription
+            EmailData(.AbsolutePosition - 1).Delivered = False
+            EmailData(.AbsolutePosition - 1).TimeStamp = !idTimeStamp
             .MoveNext
         End With
     Loop
@@ -482,7 +493,8 @@ Public Sub SendEmails()
     For i = 0 To UBound(EmailData) - 1
         If bolVerbose Then ToLog "Sending SMTP: " & EmailData(i).SendOrRec & " - " & EmailData(i).strFrom & " - " & EmailData(i).strTo & " - " & EmailData(i).JobNum & " - " & EmailData(i).Description & " - " & EmailData(i).PartNum & " - " & EmailData(i).Customer & " - " & EmailData(i).Creator & " - " & EmailData(i).CreateDate & " - " & EmailData(i).Comment
         JPTRS.lblStatus.Caption = "Sending EMail...."
-        SendNotification EmailData(i).SendOrRec, EmailData(i).strFrom, EmailData(i).strTo, EmailData(i).JobNum, EmailData(i).Description, EmailData(i).PartNum, EmailData(i).Customer, EmailData(i).Creator, EmailData(i).CreateDate, EmailData(i).Comment
+        SendNotification EmailData(i).SendOrRec, EmailData(i).strFrom, EmailData(i).strTo, EmailData(i).JobNum, EmailData(i).Description, EmailData(i).PartNum, EmailData(i).Customer, EmailData(i).Creator, EmailData(i).CreateDate, EmailData(i).Comment, EmailData(i).TimeStamp
+        EmailData(i).Delivered = True
         JPTRS.lblStatus.Caption = "Waiting...."
         ToLog "Waiting..."
         Wait 10000 'wait to avoid flooding server
@@ -502,14 +514,16 @@ Public Sub ClearEmailQueue(Optional strGUID As String)
     If strGUID = "" Then
         If bolVerbose Then ToLog "Clearing Queue..."
         For i = 0 To UBound(EmailData) - 1
-            strSQL1 = "SELECT * From emailqueue Where idGUID = '" & EmailData(i).GUID & "'"
-            JPTRS.lblStatus.Caption = "Clearing Queue..."
-            rs.Open strSQL1, cn_global, adOpenKeyset, adLockOptimistic
-            With rs
-                .Delete
-                .Update
-            End With
-            rs.Close
+            If EmailData(i).Delivered Then
+                strSQL1 = "SELECT * From emailqueue Where idGUID = '" & EmailData(i).GUID & "'"
+                JPTRS.lblStatus.Caption = "Clearing Queue..."
+                rs.Open strSQL1, cn_global, adOpenKeyset, adLockOptimistic
+                With rs
+                    .Delete
+                    .Update
+                End With
+                rs.Close
+            End If
         Next i
         ReDim EmailData(0)
     Else

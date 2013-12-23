@@ -23,15 +23,6 @@ Begin VB.Form JPTRS
    ScaleHeight     =   5235
    ScaleWidth      =   8370
    StartUpPosition =   1  'CenterOwner
-   Begin VB.CommandButton Command1 
-      Caption         =   "Command1"
-      Height          =   360
-      Left            =   780
-      TabIndex        =   14
-      Top             =   660
-      Visible         =   0   'False
-      Width           =   990
-   End
    Begin VB.Timer tmrRefresher 
       Interval        =   30000
       Left            =   7560
@@ -70,6 +61,154 @@ Begin VB.Form JPTRS
       Interval        =   2000
       Left            =   7560
       Top             =   120
+   End
+   Begin VB.Label lblRetries 
+      AutoSize        =   -1  'True
+      BackStyle       =   0  'Transparent
+      Caption         =   "%RETRIES%"
+      Height          =   195
+      Left            =   1920
+      TabIndex        =   23
+      Top             =   1560
+      Width           =   960
+   End
+   Begin VB.Label lblSuccess 
+      AutoSize        =   -1  'True
+      BackStyle       =   0  'Transparent
+      Caption         =   "%SUCCESS%"
+      Height          =   195
+      Left            =   1920
+      TabIndex        =   22
+      Top             =   1320
+      Width           =   1005
+   End
+   Begin VB.Label lblRequests 
+      AutoSize        =   -1  'True
+      BackStyle       =   0  'Transparent
+      Caption         =   "%REQUESTS%"
+      Height          =   195
+      Left            =   1920
+      TabIndex        =   21
+      Top             =   1080
+      Width           =   1110
+   End
+   Begin VB.Label Label6 
+      Alignment       =   1  'Right Justify
+      AutoSize        =   -1  'True
+      BackStyle       =   0  'Transparent
+      Caption         =   "Retries:"
+      BeginProperty Font 
+         Name            =   "Tahoma"
+         Size            =   8.25
+         Charset         =   0
+         Weight          =   700
+         Underline       =   0   'False
+         Italic          =   0   'False
+         Strikethrough   =   0   'False
+      EndProperty
+      Height          =   195
+      Left            =   1200
+      TabIndex        =   20
+      Top             =   1560
+      Width           =   660
+   End
+   Begin VB.Label Label4 
+      Alignment       =   1  'Right Justify
+      AutoSize        =   -1  'True
+      BackStyle       =   0  'Transparent
+      Caption         =   "Successful:"
+      BeginProperty Font 
+         Name            =   "Tahoma"
+         Size            =   8.25
+         Charset         =   0
+         Weight          =   700
+         Underline       =   0   'False
+         Italic          =   0   'False
+         Strikethrough   =   0   'False
+      EndProperty
+      Height          =   195
+      Left            =   900
+      TabIndex        =   19
+      Top             =   1320
+      Width           =   930
+   End
+   Begin VB.Label Label3 
+      Alignment       =   1  'Right Justify
+      AutoSize        =   -1  'True
+      BackStyle       =   0  'Transparent
+      Caption         =   "Requests: "
+      BeginProperty Font 
+         Name            =   "Tahoma"
+         Size            =   8.25
+         Charset         =   0
+         Weight          =   700
+         Underline       =   0   'False
+         Italic          =   0   'False
+         Strikethrough   =   0   'False
+      EndProperty
+      Height          =   195
+      Left            =   1020
+      TabIndex        =   18
+      Top             =   1080
+      Width           =   885
+   End
+   Begin VB.Label lblSMTPAddy 
+      AutoSize        =   -1  'True
+      BackStyle       =   0  'Transparent
+      Caption         =   "%SMTP Addy%"
+      Height          =   195
+      Left            =   1680
+      TabIndex        =   17
+      Top             =   600
+      Width           =   1140
+   End
+   Begin VB.Label Label2 
+      AutoSize        =   -1  'True
+      BackStyle       =   0  'Transparent
+      Caption         =   "SMTP Address:"
+      BeginProperty Font 
+         Name            =   "Tahoma"
+         Size            =   8.25
+         Charset         =   0
+         Weight          =   700
+         Underline       =   0   'False
+         Italic          =   0   'False
+         Strikethrough   =   0   'False
+      EndProperty
+      Height          =   195
+      Left            =   300
+      TabIndex        =   16
+      Top             =   600
+      Width           =   1245
+   End
+   Begin VB.Label lblServerIP 
+      AutoSize        =   -1  'True
+      BackStyle       =   0  'Transparent
+      Caption         =   "%SERVER IP%"
+      Height          =   195
+      Left            =   1680
+      TabIndex        =   15
+      Top             =   360
+      Width           =   1095
+   End
+   Begin VB.Label Label1 
+      AutoSize        =   -1  'True
+      BackStyle       =   0  'Transparent
+      Caption         =   "Server IP:"
+      BeginProperty Font 
+         Name            =   "Tahoma"
+         Size            =   8.25
+         Charset         =   0
+         Weight          =   700
+         Underline       =   0   'False
+         Italic          =   0   'False
+         Strikethrough   =   0   'False
+      EndProperty
+      Height          =   195
+      Left            =   720
+      TabIndex        =   14
+      Top             =   360
+      Width           =   840
    End
    Begin VB.Label lblCurDay 
       AutoSize        =   -1  'True
@@ -254,6 +393,7 @@ Sub minimize_to_tray()
     nid.szTip = "Click to View" & vbNullChar
     Shell_NotifyIcon NIM_ADD, nid
 End Sub
+
 Private Sub Form_MouseMove(Button As Integer, Shift As Integer, x As Single, y As Single)
     Dim msg     As Long
     Dim sFilter As String
@@ -279,6 +419,9 @@ Private Sub cmdSendToTray_Click()
     minimize_to_tray
 End Sub
 Private Sub Form_Load()
+    strAPPTITLE = JPTRS.Caption
+    lblServerIP.Caption = GetIpAddrTable(0)
+    lblSMTPAddy.Caption = strSMTPServer
     lblAPPVERSION.Caption = App.Major & "." & App.Minor & "." & App.Revision
     bolVerbose = CBool(chkVerbose.Value)
     strLogLoc = Environ$("APPDATA") & "\JPTRS\LOG.LOG"
@@ -314,6 +457,11 @@ End Sub
 Private Sub tmrCheckQueue_Timer()
     JPTRS.lblStatus.Caption = "Idle..."
     CheckQueue
+    lngUptime = lngUptime + tmrCheckQueue.Interval
+    JPTRS.Caption = strAPPTITLE + " - Up " & ConvertTime(lngUptime)
+    lblRequests.Caption = lngAttempts
+    lblSuccess.Caption = lngSuccess
+    lblRetries.Caption = lngRetries
 End Sub
 
 Private Sub tmrReportClock_Timer()

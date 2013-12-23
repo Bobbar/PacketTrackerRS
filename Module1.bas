@@ -112,7 +112,48 @@ Public Declare Function GetTickCount Lib "kernel32" () As Long
 Public Const DayToRun           As Long = vbMonday
 Public Const MinutesTillRefresh As Long = 60 'Minutes until user list refresh * 2  (60 = 30)
 Public MinsCounted              As Long
+Public lngUptime                As Long
+Public strAPPTITLE              As String
+Public lngAttempts              As Long, lngSuccess As Long, lngRetries As Long
+Private Declare Function GetIpAddrTable_API _
+                Lib "IpHlpApi" _
+                Alias "GetIpAddrTable" (pIPAddrTable As Any, _
+                                        pdwSize As Long, _
+                                        ByVal bOrder As Long) As Long
 
+' Returns an array with the local IP addresses (as strings).
+' Author: Christian d'Heureuse, www.source-code.biz
+Public Function GetIpAddrTable()
+    Dim Buf(0 To 511) As Byte
+    Dim BufSize       As Long: BufSize = UBound(Buf) + 1
+    Dim rc            As Long
+    rc = GetIpAddrTable_API(Buf(0), BufSize, 1)
+    If rc <> 0 Then Err.Raise vbObjectError, , "GetIpAddrTable failed with return value " & rc
+    Dim NrOfEntries As Integer: NrOfEntries = Buf(1) * 256 + Buf(0)
+    If NrOfEntries = 0 Then GetIpAddrTable = Array(): Exit Function
+    ReDim IpAddrs(0 To NrOfEntries - 1) As String
+    Dim i As Integer
+    For i = 0 To NrOfEntries - 1
+        Dim j As Integer, s As String: s = ""
+        For j = 0 To 3: s = s & IIf(j > 0, ".", "") & Buf(4 + i * 24 + j): Next
+        IpAddrs(i) = s
+    Next
+    GetIpAddrTable = IpAddrs
+End Function
+Public Function ConvertTime(ByVal lngMS As Long) As String
+    Dim lngSeconds As Long, lngDays As Long, lngHours As Long, lngMins As Long
+    Dim strSeconds As String, strDays As String
+    lngSeconds = lngMS / 1000
+    lngDays = Int(lngSeconds / 86400)
+    lngSeconds = lngSeconds Mod 86400
+    lngHours = Int(lngSeconds / 3600)
+    lngSeconds = lngSeconds Mod 3600
+    lngMins = Int(lngSeconds / 60)
+    lngSeconds = lngSeconds Mod 60
+    'If lngSeconds <> 1 Then strSeconds = "s"
+    If lngDays <> 1 Then strDays = "s"
+    ConvertTime = lngDays & " days,  " & lngHours & ":" & lngMins & ":" & lngSeconds
+End Function
 Public Sub Wait(ByVal DurationMS As Long)
     Dim EndTime As Long
     EndTime = GetTickCount + DurationMS
@@ -312,10 +353,14 @@ errs:
     ToLog "Failed to send EMail notification!"
     If bolVerbose Then ToLog "ERROR DTL:  SUB = SendNotification | " & Err.Number & " - " & Err.Description
     If Err.Number = -2147220973 Then 'if failed to connect then clear successful deliveries and try again
+        ToLog "Could not establish connection. Clearing successful from queue and retrying..."
+        lngRetries = lngRetries + 1
         ClearEmailQueue
         CheckQueue
     End If
     If Err.Number = -2147220974 Then 'if lost connection, the email still made it, so fail softly and continue
+        ToLog "Lost connection after send, probably... Moving on..."
+        lngSuccess = lngSuccess + 1
         Resume Next
     End If
 End Sub
@@ -441,7 +486,7 @@ Public Sub CheckQueue()
     If rs.RecordCount = 0 Then
         Exit Sub
     Else
-        ToLog "Emails found in queue.  Parsing..."
+        ToLog rs.RecordCount & " Email(s) found in queue.  Parsing..."
     End If
     ReDim EmailData(rs.RecordCount)
     Do Until rs.EOF
@@ -491,10 +536,12 @@ Public Sub SendEmails()
     On Error GoTo errs
     Dim i As Integer
     For i = 0 To UBound(EmailData) - 1
-        If bolVerbose Then ToLog "Sending SMTP: " & EmailData(i).SendOrRec & " - " & EmailData(i).strFrom & " - " & EmailData(i).strTo & " - " & EmailData(i).JobNum & " - " & EmailData(i).Description & " - " & EmailData(i).PartNum & " - " & EmailData(i).Customer & " - " & EmailData(i).Creator & " - " & EmailData(i).CreateDate & " - " & EmailData(i).Comment
+        If bolVerbose Then ToLog "Sending SMTP " & i + 1 & " of " & UBound(EmailData) & " : " & EmailData(i).SendOrRec & " - " & EmailData(i).strFrom & " - " & EmailData(i).strTo & " - " & EmailData(i).JobNum & " - " & EmailData(i).Description & " - " & EmailData(i).PartNum & " - " & EmailData(i).Customer & " - " & EmailData(i).Creator & " - " & EmailData(i).CreateDate & " - " & EmailData(i).Comment
         JPTRS.lblStatus.Caption = "Sending EMail...."
+        lngAttempts = lngAttempts + 1
         SendNotification EmailData(i).SendOrRec, EmailData(i).strFrom, EmailData(i).strTo, EmailData(i).JobNum, EmailData(i).Description, EmailData(i).PartNum, EmailData(i).Customer, EmailData(i).Creator, EmailData(i).CreateDate, EmailData(i).Comment, EmailData(i).TimeStamp
         EmailData(i).Delivered = True
+        lngSuccess = lngSuccess + 1
         JPTRS.lblStatus.Caption = "Waiting...."
         ToLog "Waiting..."
         Wait 10000 'wait to avoid flooding server
@@ -611,6 +658,7 @@ Public Sub WeeklyReportParseHTML()
     Dim i       As Integer
     tmpHTML = tmpHTML + "<FONT STYLE=font-family:Tahoma;>" & vbCrLf
     tmpHTML = tmpHTML + "<FONT SIZE=4><U>Weekly Job Packet Report</U></FONT><BR>" & vbCrLf
+    tmpHTML = tmpHTML + "<FONT SIZE=2> Run Date: " & Now & "</FONT><BR>" & vbCrLf
     tmpHTML = tmpHTML + "<FONT SIZE=2> Report Date: " & dtStartDate & " to " & dtEndDate & "</FONT><BR><BR>" & vbCrLf
     tmpHTML = tmpHTML + "<table border=1 cellpadding=2>" & vbCrLf
     tmpHTML = tmpHTML + "<tr>" & vbCrLf
@@ -637,7 +685,7 @@ Public Sub WeeklyReportParseHTML()
     Next
     tmpHTML = tmpHTML + "</table>"
     strReportHTML = tmpHTML
-    'Debug.Print strReportHTML
+    Debug.Print strReportHTML
     Exit Sub
 errs:
     ' Debug.Print Err.Number
@@ -645,7 +693,7 @@ errs:
     If bolVerbose Then ToLog "ERROR DTL:  SUB =  WeeklyReportParseHTML | " & Err.Number & " - " & Err.Description
 End Sub
 Public Sub SendReport(MailFrom As String, MailTo As String)
-    ToLog "Sending Weekly Report..."
+    ToLog "Sending Weekly Report...  (" & dtStartDate & " to " & dtEndDate & ")"
     On Error GoTo errs
     Dim iConf As New CDO.Configuration
     Dim Flds  As ADODB.Fields

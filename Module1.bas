@@ -1,12 +1,13 @@
 Attribute VB_Name = "Module1"
 Option Explicit
 Global cn_global              As New ADODB.Connection
-Public Const colCreate        As Long = &H80C0FF
+Public Const colCreate        As Long = &HFFBF80 '&H80C0FF
 Public Const colInTransit     As Long = &H80FF80
 Public Const colReceived      As Long = &HF4FF80 '&H80FFFF
 Public Const colClosed        As Long = &H8080FF
 Public Const colFiled         As Long = &H8587FF '&HFF8080
 Public Const colReopened      As Long = &HFF80FF
+Public Const intWaitTime As Integer = 10000
 Public Const strSMTPServer    As String = "mx.wthg.com"
 Public Const strServerAddress As String = "10.35.1.40"
 Public Const strUsername      As String = "TicketApp"
@@ -544,7 +545,7 @@ Public Sub SendEmails()
         lngSuccess = lngSuccess + 1
         JPTRS.lblStatus.Caption = "Waiting...."
         ToLog "Waiting..."
-        Wait 10000 'wait to avoid flooding server
+        Wait intWaitTime 'wait to avoid flooding server
     Next
     Exit Sub
 errs:

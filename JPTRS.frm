@@ -433,6 +433,7 @@ Private Sub Form_Load()
     cn_global.Open "uid=" & strUsername & ";pwd=" & strPassword & ";server=" & strServerAddress & ";" & "driver={" & strSQLDriver & "};database=TicketDB;dsn=;"
     ToLog "Getting User List..."
     GetUserIndex
+    ToLog "Ready!..."
     minimize_to_tray
 End Sub
 Private Sub Form_QueryUnload(Cancel As Integer, UnloadMode As Integer)

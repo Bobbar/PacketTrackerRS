@@ -7,7 +7,7 @@ Public Const colReceived      As Long = &HF4FF80 '&H80FFFF
 Public Const colClosed        As Long = &H8080FF
 Public Const colFiled         As Long = &H8587FF '&HFF8080
 Public Const colReopened      As Long = &HFF80FF
-Public Const intWaitTime As Integer = 10000
+Public Const intWaitTime      As Integer = 10000
 Public Const strSMTPServer    As String = "mx.wthg.com"
 Public Const strServerAddress As String = "10.35.1.40"
 Public Const strUsername      As String = "TicketApp"
@@ -121,7 +121,19 @@ Private Declare Function GetIpAddrTable_API _
                 Alias "GetIpAddrTable" (pIPAddrTable As Any, _
                                         pdwSize As Long, _
                                         ByVal bOrder As Long) As Long
-
+Public Function ConnectToDB() As Boolean
+    On Error GoTo errs
+    ConnectToDB = False
+    cn_global.Open "uid=" & strUsername & ";pwd=" & strPassword & ";server=" & strServerAddress & ";" & "driver={" & strSQLDriver & "};database=TicketDB;dsn=;"
+    If cn_global.State = 1 Then
+        ConnectToDB = True
+    Else
+        ConnectToDB = False
+    End If
+    Exit Function
+errs:
+    ErrHandle Err.Number, Err.Description, "ConnectToDB"
+End Function
 ' Returns an array with the local IP addresses (as strings).
 ' Author: Christian d'Heureuse, www.source-code.biz
 Public Function GetIpAddrTable()
@@ -350,7 +362,6 @@ Public Sub SendNotification(SendRec As String, _
     Set Flds = Nothing
     Exit Sub
 errs:
-    ' Debug.Print Err.Number
     ToLog "Failed to send EMail notification!"
     If bolVerbose Then ToLog "ERROR DTL:  SUB = SendNotification | " & Err.Number & " - " & Err.Description
     If Err.Number = -2147220973 Then 'if failed to connect then clear successful deliveries and try again
@@ -472,7 +483,6 @@ Public Function GenerateHTML(strSendOrRec As String, _
     End If
     Exit Function
 errs:
-    ' Debug.Print Err.Number
     ToLog "Failed to Genterate HTML!"
     If bolVerbose Then ToLog "ERROR DTL:  SUB = GenerateHTML | " & Err.Number & " - " & Err.Description
 End Function
@@ -512,15 +522,29 @@ Public Sub CheckQueue()
     rs.Close
     SendEmails
     ClearEmailQueue
+    ToLog "Done..."
     Exit Sub
 errs:
-    ' Debug.Print Err.Number
     ToLog "Error Checking Queue!"
-    If bolVerbose Then ToLog "ERROR DTL:  SUB = CheckQueue | " & Err.Number & " - " & Err.Description
+    ErrHandle Err.Number, Err.Description, "CheckQueue"
     If Err.Number = 94 Then
         ToLog "Null values detected! Packet data missing. Clearing single item from queue."
         ClearEmailQueue tmpGUID
     End If
+End Sub
+Public Sub ErrHandle(lngErrNum As Long, strErrDescription As String, strOrigSub As String)
+    Select Case lngErrNum
+        Case -2147467259, 3704
+            JPTRS.lblStatus.Caption = "Disconnected!"
+            If bolVerbose Then ToLog "ERROR DTL:  SUB = CheckQueue | " & Err.Number & " - " & Err.Description
+            ToLog "SQL Connection Lost!  Trying to Reconnect..."
+            Set cn_global = Nothing
+            If ConnectToDB Then
+                ToLog "Connected!"
+            End If
+        Case Else
+            ToLog lngErrNum & " - " & strErrDescription & " | " & strOrigSub
+    End Select
 End Sub
 Public Sub ToLog(Message As String)
     Dim tmpMsg As String
@@ -531,6 +555,7 @@ Public Sub ToLog(Message As String)
         .lstLog.AddItem tmpMsg, 0
         Print #1, tmpMsg
         Close #1
+        DoEvents
     End With
 End Sub
 Public Sub SendEmails()
@@ -549,7 +574,6 @@ Public Sub SendEmails()
     Next
     Exit Sub
 errs:
-    ' Debug.Print Err.Number
     ToLog "Error Sending Emails!"
     ToLog "ERROR DTL:  SUB = SendEmails | " & Err.Number & " - " & Err.Description
 End Sub
@@ -586,7 +610,6 @@ Public Sub ClearEmailQueue(Optional strGUID As String)
     End If
     Exit Sub
 errs:
-    ' Debug.Print Err.Number
     ToLog "Error Clearing Queue!"
     ToLog "ERROR DTL:  SUB = ClearEmailQueue | " & Err.Number & " - " & Err.Description
 End Sub
@@ -686,10 +709,8 @@ Public Sub WeeklyReportParseHTML()
     Next
     tmpHTML = tmpHTML + "</table>"
     strReportHTML = tmpHTML
-    Debug.Print strReportHTML
     Exit Sub
 errs:
-    ' Debug.Print Err.Number
     ToLog "Failed while parsing Weekly Report HTML!"
     If bolVerbose Then ToLog "ERROR DTL:  SUB =  WeeklyReportParseHTML | " & Err.Number & " - " & Err.Description
 End Sub
@@ -724,7 +745,6 @@ Public Sub SendReport(MailFrom As String, MailTo As String)
     ToLog "Report Sent..."
     Exit Sub
 errs:
-    ' Debug.Print Err.Number
     ToLog "Failed to send Weekly Report!"
     If bolVerbose Then ToLog "ERROR DTL:  SUB = SendReport | " & Err.Number & " - " & Err.Description
 End Sub
@@ -784,7 +804,6 @@ Public Sub WeeklyReportParseCSV()
     Dim i          As Integer
     strCSVName = Format$(DateTime.Date & " " & DateTime.Time, "YYYY-MM-DD-hh-mm-ss") & ".csv"
     strCSVFullName = strCSVLoc & strCSVName
-    Debug.Print strCSVFullName
     Open strCSVFullName For Append As #2
     For i = 0 To UBound(ReportData)
         Print #2, ReportData(i).Action & "," & ReportData(i).JobNum & "," & ReportData(i).Description & "," & ReportData(i).Customer & "," & ReportData(i).JobNum & "," & ReportData(i).Creator & "," & ReportData(i).CreateDate
@@ -792,7 +811,6 @@ Public Sub WeeklyReportParseCSV()
     Close #2
     Exit Sub
 errs:
-    ' Debug.Print Err.Number
     ToLog "Failed while parsing Weekly Report!"
     If bolVerbose Then ToLog "ERROR DTL:  SUB = WeeklyReportParseCSV | " & Err.Number & " - " & Err.Description
 End Sub

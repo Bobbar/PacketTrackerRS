@@ -393,7 +393,6 @@ Sub minimize_to_tray()
     nid.szTip = "Click to View" & vbNullChar
     Shell_NotifyIcon NIM_ADD, nid
 End Sub
-
 Private Sub Form_MouseMove(Button As Integer, Shift As Integer, x As Single, y As Single)
     Dim msg     As Long
     Dim sFilter As String
@@ -414,11 +413,12 @@ End Sub
 Private Sub chkVerbose_Click()
     bolVerbose = CBool(chkVerbose.Value)
 End Sub
-
 Private Sub cmdSendToTray_Click()
     minimize_to_tray
 End Sub
 Private Sub Form_Load()
+    minimize_to_tray
+    DoEvents
     strAPPTITLE = JPTRS.Caption
     lblServerIP.Caption = GetIpAddrTable(0)
     lblSMTPAddy.Caption = strSMTPServer
@@ -430,11 +430,11 @@ Private Sub Form_Load()
     FindMySQLDriver
     ToLog "Starting Global ADO Connection..."
     If bolVerbose Then ToLog "uid=" & strUsername & ";pwd=" & strPassword & ";server=" & strServerAddress & ";" & "driver={" & strSQLDriver & "};database=TicketDB;dsn=;"
-    cn_global.Open "uid=" & strUsername & ";pwd=" & strPassword & ";server=" & strServerAddress & ";" & "driver={" & strSQLDriver & "};database=TicketDB;dsn=;"
+    If ConnectToDB Then ToLog "Connected!"
+    'cn_global.Open "uid=" & strUsername & ";pwd=" & strPassword & ";server=" & strServerAddress & ";" & "driver={" & strSQLDriver & "};database=TicketDB;dsn=;"
     ToLog "Getting User List..."
     GetUserIndex
     ToLog "Ready!..."
-    minimize_to_tray
 End Sub
 Private Sub Form_QueryUnload(Cancel As Integer, UnloadMode As Integer)
     Dim blah
@@ -450,11 +450,9 @@ Private Sub Form_QueryUnload(Cancel As Integer, UnloadMode As Integer)
         Cancel = True
     End If
 End Sub
-
 Private Sub Form_Unload(Cancel As Integer)
     Shell_NotifyIcon NIM_DELETE, nid ' del tray icon
 End Sub
-
 Private Sub tmrCheckQueue_Timer()
     JPTRS.lblStatus.Caption = "Idle..."
     CheckQueue
@@ -463,15 +461,14 @@ Private Sub tmrCheckQueue_Timer()
     lblRequests.Caption = lngAttempts
     lblSuccess.Caption = lngSuccess
     lblRetries.Caption = lngRetries
+    DoEvents
 End Sub
-
 Private Sub tmrReportClock_Timer()
     lblTime = Now
     If OKToRun Then WeeklyReportGetData
     lblRptDay.Caption = strDayOfWeek(DayToRun)
     lblCurDay.Caption = strDayOfWeek(Weekday(Now))
 End Sub
-
 Private Sub tmrRefresher_Timer()
     MinsCounted = MinsCounted + 1
     If MinsCounted >= MinutesTillRefresh Then

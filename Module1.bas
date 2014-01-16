@@ -548,14 +548,14 @@ Public Sub ErrHandle(lngErrNum As Long, strErrDescription As String, strOrigSub 
 End Sub
 Public Sub ToLog(Message As String)
     Dim tmpMsg As String
-    If Dir$(strLogLoc) = "" Then MkDir Environ$("APPDATA") & "\JPTRS\"
-    Open strLogLoc For Append As #1
+    If Dir$(strLogLoc, vbDirectory) = "" Then MkDir strLogLoc 'Environ$("APPDATA") & "\JPTRS\"
+    Open strLogLoc & "\LOG.LOG" For Append As #1
     With JPTRS
         tmpMsg = DateTime.Date & " " & DateTime.Time & ": " & Message
         .lstLog.AddItem tmpMsg, 0
         Print #1, tmpMsg
         Close #1
-        DoEvents
+       ' DoEvents
     End With
 End Sub
 Public Sub SendEmails()
@@ -578,7 +578,7 @@ errs:
     ToLog "ERROR DTL:  SUB = SendEmails | " & Err.Number & " - " & Err.Description
 End Sub
 Public Sub ClearEmailQueue(Optional strGUID As String)
-    On Error GoTo errs
+  On Error GoTo errs
     Dim i       As Integer
     Dim rs      As New ADODB.Recordset
     Dim strSQL1 As String

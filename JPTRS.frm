@@ -424,7 +424,7 @@ Private Sub Form_Load()
     lblSMTPAddy.Caption = strSMTPServer
     lblAPPVERSION.Caption = App.Major & "." & App.Minor & "." & App.Revision
     bolVerbose = CBool(chkVerbose.Value)
-    strLogLoc = Environ$("APPDATA") & "\JPTRS\LOG.LOG"
+    strLogLoc = App.Path  'Environ$("APPDATA") & "\JPTRS\LOG.LOG"
     strCSVLoc = Environ$("APPDATA") & "\JPTRS\"
     ToLog "Initializing..."
     FindMySQLDriver
@@ -437,18 +437,24 @@ Private Sub Form_Load()
     ToLog "Ready!..."
 End Sub
 Private Sub Form_QueryUnload(Cancel As Integer, UnloadMode As Integer)
+   On Error GoTo errs
     Dim blah
-    blah = MsgBox("Are you sure you want to close the server!", vbOKCancel, "Are you sure?!")
-    If blah = vbOK Then
+   ' blah = MsgBox("Are you sure you want to close the server!", vbOKCancel, "Are you sure?!")
+    If blah = blah Then 'vbOK Then
         ToLog "Closing Server Application..."
         cn_global.Close
         ToLog "Global ADO Connection Closed..."
         Unload Me
         ToLog "Unloaded Form..."
+        ToLog "Goodbye..."
         End
     Else
         Cancel = True
     End If
+errs:
+  ToLog Err.Number & " - " & Err.Description
+  Resume Next
+  
 End Sub
 Private Sub Form_Unload(Cancel As Integer)
     Shell_NotifyIcon NIM_DELETE, nid ' del tray icon

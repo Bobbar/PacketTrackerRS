@@ -648,7 +648,7 @@ Public Sub WeeklyReportGetData()
                 ElseIf !idAction = "INTRANSIT" Then
                     ReportData(i).Action = !idAction & " to " & GetFullName(!idUserTo)
                 ElseIf !idAction = "RECEIVED" Then
-                    ReportData(i).Action = !idAction & " by " & GetFullName(!idUserFrom)
+                    ReportData(i).Action = !idAction & " by " & GetFullName(!idUser)
                 ElseIf !idAction = "NULL" Then
                     ReportData(i).Action = "CLOSED by " & GetFullName(!idUser)
                 ElseIf !idStatus = "OPEN" And !idAction = "FILED" Then

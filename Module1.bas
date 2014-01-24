@@ -110,12 +110,13 @@ Public strReportHTML           As String
 Public dtStartDate             As Date, dtEndDate As Date
 Public Declare Sub Sleep Lib "kernel32.dll" (ByVal dwMilliseconds As Long)
 Public Declare Function GetTickCount Lib "kernel32" () As Long
-Public Const DayToRun           As Long = vbMonday
-Public Const MinutesTillRefresh As Long = 60 'Minutes until user list refresh * 2  (60 = 30)
-Public MinsCounted              As Long
-Public lngUptime                As Long
-Public strAPPTITLE              As String
-Public lngAttempts              As Long, lngSuccess As Long, lngRetries As Long
+Public Const DayToRun                As Long = vbMonday
+Public Const MinutesTillRefresh      As Long = 30 'Minutes between user list refresh
+Public Const MinutesTillStatusReport As Long = 60 'Minutes between status updates in log
+Public MinsCounted                   As Long
+Public lngUptime                     As Long
+Public strAPPTITLE                   As String
+Public lngAttempts                   As Long, lngSuccess As Long, lngRetries As Long
 Private Declare Function GetIpAddrTable_API _
                 Lib "IpHlpApi" _
                 Alias "GetIpAddrTable" (pIPAddrTable As Any, _
@@ -440,7 +441,7 @@ Public Function GenerateHTML(strSendOrRec As String, _
         tmpHTML = tmpHTML + "<HTML>" & vbCrLf
         tmpHTML = tmpHTML + "<BODY BGCOLOR=" & BackColor & ">" & vbCrLf
         tmpHTML = tmpHTML + "<FONT STYLE=font-family:Tahoma;>" & vbCrLf
-        tmpHTML = tmpHTML + "<FONT SIZE=2>" & DateTime.Date$ & " " & DateTime.Time$ & "</FONT><BR>" & vbCrLf
+        tmpHTML = tmpHTML + "<FONT SIZE=2>" & strTimeStamp & "</FONT><BR>" & vbCrLf
         tmpHTML = tmpHTML + "<FONT SIZE=6><U>Message from Job Packet Tracker:</U></FONT><BR><BR>" & vbCrLf
         tmpHTML = tmpHTML + strFrom & " has received Job Packet <b>" & strPacketNum & "</b><BR><BR>" & vbCrLf
         If strComment <> "" Then
@@ -555,7 +556,7 @@ Public Sub ToLog(Message As String)
         .lstLog.AddItem tmpMsg, 0
         Print #1, tmpMsg
         Close #1
-       ' DoEvents
+        ' DoEvents
     End With
 End Sub
 Public Sub SendEmails()
@@ -578,7 +579,7 @@ errs:
     ToLog "ERROR DTL:  SUB = SendEmails | " & Err.Number & " - " & Err.Description
 End Sub
 Public Sub ClearEmailQueue(Optional strGUID As String)
-  On Error GoTo errs
+    On Error GoTo errs
     Dim i       As Integer
     Dim rs      As New ADODB.Recordset
     Dim strSQL1 As String

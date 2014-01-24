@@ -23,8 +23,8 @@ Begin VB.Form JPTRS
    ScaleHeight     =   5235
    ScaleWidth      =   8370
    StartUpPosition =   1  'CenterOwner
-   Begin VB.Timer tmrRefresher 
-      Interval        =   30000
+   Begin VB.Timer tmrTaskTimer 
+      Interval        =   60000
       Left            =   7560
       Top             =   1080
    End
@@ -437,9 +437,9 @@ Private Sub Form_Load()
     ToLog "Ready!..."
 End Sub
 Private Sub Form_QueryUnload(Cancel As Integer, UnloadMode As Integer)
-   On Error GoTo errs
+    On Error GoTo errs
     Dim blah
-   ' blah = MsgBox("Are you sure you want to close the server!", vbOKCancel, "Are you sure?!")
+    ' blah = MsgBox("Are you sure you want to close the server!", vbOKCancel, "Are you sure?!")
     If blah = blah Then 'vbOK Then
         ToLog "Closing Server Application..."
         cn_global.Close
@@ -452,9 +452,8 @@ Private Sub Form_QueryUnload(Cancel As Integer, UnloadMode As Integer)
         Cancel = True
     End If
 errs:
-  ToLog Err.Number & " - " & Err.Description
-  Resume Next
-  
+    ToLog Err.Number & " - " & Err.Description
+    Resume Next
 End Sub
 Private Sub Form_Unload(Cancel As Integer)
     Shell_NotifyIcon NIM_DELETE, nid ' del tray icon
@@ -475,16 +474,23 @@ Private Sub tmrReportClock_Timer()
     lblRptDay.Caption = strDayOfWeek(DayToRun)
     lblCurDay.Caption = strDayOfWeek(Weekday(Now))
 End Sub
-Private Sub tmrRefresher_Timer()
+Private Sub tmrTaskTimer_Timer()
     MinsCounted = MinsCounted + 1
-    If MinsCounted >= MinutesTillRefresh Then
+    If CurrentInterval(MinsCounted, MinutesTillRefresh) Then
         tmrCheckQueue.Enabled = False
         tmrReportClock.Enabled = False
         Wait 5
         GetUserIndex
         tmrCheckQueue.Enabled = True
         tmrReportClock.Enabled = True
-        MinsCounted = 0
     Else
     End If
+    If CurrentInterval(MinsCounted, MinutesTillStatusReport) Then
+        ToLog "STATUS: Uptime: " & ConvertTime(lngUptime) & "    Atmpts, Sucss, Rtry: " & lngAttempts & ", " & lngSuccess & ", " & lngRetries
+    End If
+    If MinsCounted >= 1440 Then MinsCounted = 0 'day has passed, start over
 End Sub
+Private Function CurrentInterval(lngTimeCounted As Long, _
+                                 lngIntervalTime As Long) As Boolean
+    CurrentInterval = (lngTimeCounted / lngIntervalTime) = Int(lngTimeCounted / lngIntervalTime)
+End Function

@@ -382,6 +382,10 @@ Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
 Option Explicit
 Dim nid As NOTIFYICONDATA
+Private Function CurrentInterval(lngTimeCounted As Long, _
+                                 lngIntervalTime As Long) As Boolean
+    CurrentInterval = (lngTimeCounted / lngIntervalTime) = Int(lngTimeCounted / lngIntervalTime)
+End Function
 Sub minimize_to_tray()
     Me.Hide
     nid.cbSize = Len(nid)
@@ -393,28 +397,16 @@ Sub minimize_to_tray()
     nid.szTip = "Click to View" & vbNullChar
     Shell_NotifyIcon NIM_ADD, nid
 End Sub
-Private Sub Form_MouseMove(Button As Integer, Shift As Integer, x As Single, y As Single)
-    Dim msg     As Long
-    Dim sFilter As String
-    msg = x / Screen.TwipsPerPixelX
-    Select Case msg
-        Case WM_LBUTTONDOWN
-            Me.Show ' show form
-            Shell_NotifyIcon NIM_DELETE, nid ' del tray icon
-        Case WM_LBUTTONUP
-        Case WM_LBUTTONDBLCLK
-        Case WM_RBUTTONDOWN
-        Case WM_RBUTTONUP
-            Me.Show
-            Shell_NotifyIcon NIM_DELETE, nid
-        Case WM_RBUTTONDBLCLK
-    End Select
-End Sub
 Private Sub chkVerbose_Click()
     bolVerbose = CBool(chkVerbose.Value)
 End Sub
 Private Sub cmdSendToTray_Click()
     minimize_to_tray
+End Sub
+Private Sub Form_Initialize()
+    'lngStartTime = GetTickCount
+    QueryPerformanceFrequency Freq
+    QueryPerformanceCounter Ctr1
 End Sub
 Private Sub Form_Load()
     minimize_to_tray
@@ -435,6 +427,23 @@ Private Sub Form_Load()
     ToLog "Getting User List..."
     GetUserIndex
     ToLog "Ready!..."
+End Sub
+Private Sub Form_MouseMove(Button As Integer, Shift As Integer, X As Single, y As Single)
+    Dim msg     As Long
+    Dim sFilter As String
+    msg = X / Screen.TwipsPerPixelX
+    Select Case msg
+        Case WM_LBUTTONDOWN
+            Me.Show ' show form
+            Shell_NotifyIcon NIM_DELETE, nid ' del tray icon
+        Case WM_LBUTTONUP
+        Case WM_LBUTTONDBLCLK
+        Case WM_RBUTTONDOWN
+        Case WM_RBUTTONUP
+            Me.Show
+            Shell_NotifyIcon NIM_DELETE, nid
+        Case WM_RBUTTONDBLCLK
+    End Select
 End Sub
 Private Sub Form_QueryUnload(Cancel As Integer, UnloadMode As Integer)
     On Error GoTo errs
@@ -461,7 +470,10 @@ End Sub
 Private Sub tmrCheckQueue_Timer()
     JPTRS.lblStatus.Caption = "Idle..."
     CheckQueue
-    lngUptime = lngUptime + tmrCheckQueue.Interval
+    QueryPerformanceCounter Ctr2
+    lngUptime = 0
+    lngUptime = lngUptime + (Ctr2 - Ctr1) 'tmrCheckQueue.Interval
+    lngUptime = (lngUptime / Freq) * 1000
     JPTRS.Caption = strAPPTITLE + " - Up " & ConvertTime(lngUptime)
     lblRequests.Caption = lngAttempts
     lblSuccess.Caption = lngSuccess
@@ -490,7 +502,3 @@ Private Sub tmrTaskTimer_Timer()
     End If
     If MinsCounted >= 1440 Then MinsCounted = 0 'day has passed, start over
 End Sub
-Private Function CurrentInterval(lngTimeCounted As Long, _
-                                 lngIntervalTime As Long) As Boolean
-    CurrentInterval = (lngTimeCounted / lngIntervalTime) = Int(lngTimeCounted / lngIntervalTime)
-End Function

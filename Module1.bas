@@ -112,16 +112,104 @@ Public Declare Sub Sleep Lib "kernel32.dll" (ByVal dwMilliseconds As Long)
 Public Declare Function GetTickCount Lib "kernel32" () As Long
 Public Const DayToRun                As Long = vbMonday
 Public Const MinutesTillRefresh      As Long = 30 'Minutes between user list refresh
-Public Const MinutesTillStatusReport As Long = 60 'Minutes between status updates in log
+Public Const MinutesTillStatusReport As Long = 720 'Minutes between status updates in log
 Public MinsCounted                   As Long
 Public lngUptime                     As Long
 Public strAPPTITLE                   As String
 Public lngAttempts                   As Long, lngSuccess As Long, lngRetries As Long
+Public lngStartTime                  As Long
+Public lngCurTime                    As Long
 Private Declare Function GetIpAddrTable_API _
                 Lib "IpHlpApi" _
                 Alias "GetIpAddrTable" (pIPAddrTable As Any, _
                                         pdwSize As Long, _
                                         ByVal bOrder As Long) As Long
+Declare Function QueryPerformanceCounter Lib "kernel32" (X As Currency) As Boolean
+Declare Function QueryPerformanceFrequency Lib "kernel32" (X As Currency) As Boolean
+Public total As Currency
+Public Ctr1  As Currency, Ctr2 As Currency, Freq As Currency
+Public Sub CheckQueue()
+    On Error GoTo errs
+    Dim tmpGUID As String
+    Dim rs      As New ADODB.Recordset
+    Dim strSQL1 As String
+    cn_global.CursorLocation = adUseClient
+    strSQL1 = "SELECT * FROM emailqueue d LEFT JOIN packetlist c ON c.idJobNum = d.idJobNum"
+    Set rs = cn_global.Execute(strSQL1)
+    If rs.RecordCount = 0 Then
+        Exit Sub
+    Else
+        ToLog rs.RecordCount & " Email(s) found in queue.  Parsing..."
+    End If
+    ReDim EmailData(rs.RecordCount)
+    Do Until rs.EOF
+        With rs
+            tmpGUID = .Fields(5)
+            EmailData(.AbsolutePosition - 1).GUID = tmpGUID
+            EmailData(.AbsolutePosition - 1).SendOrRec = !idSendOrRec
+            EmailData(.AbsolutePosition - 1).strFrom = !idFrom
+            EmailData(.AbsolutePosition - 1).strTo = !idTo
+            EmailData(.AbsolutePosition - 1).JobNum = !idJobNum
+            EmailData(.AbsolutePosition - 1).PartNum = !idPartNum
+            EmailData(.AbsolutePosition - 1).Customer = !idCustPONum
+            EmailData(.AbsolutePosition - 1).Comment = !idComment
+            EmailData(.AbsolutePosition - 1).Creator = !idCreator
+            EmailData(.AbsolutePosition - 1).CreateDate = !idCreateDate
+            EmailData(.AbsolutePosition - 1).Description = !idDescription
+            EmailData(.AbsolutePosition - 1).Delivered = False
+            EmailData(.AbsolutePosition - 1).TimeStamp = !idTimeStamp
+            .MoveNext
+        End With
+    Loop
+    rs.Close
+    SendEmails
+    ClearEmailQueue
+    ToLog "Done..."
+    Exit Sub
+errs:
+    ToLog "Error Checking Queue!"
+    ErrHandle Err.Number, Err.Description, "CheckQueue"
+    If Err.Number = 94 Then
+        ToLog "Null values detected! Packet data missing. Clearing single item from queue."
+        ClearEmailQueue tmpGUID
+    End If
+End Sub
+Public Sub ClearEmailQueue(Optional strGUID As String)
+    On Error GoTo errs
+    Dim i       As Integer
+    Dim rs      As New ADODB.Recordset
+    Dim strSQL1 As String
+    cn_global.CursorLocation = adUseClient
+    If strGUID = "" Then
+        If bolVerbose Then ToLog "Clearing Queue..."
+        For i = 0 To UBound(EmailData) - 1
+            If EmailData(i).Delivered Then
+                strSQL1 = "SELECT * From emailqueue Where idGUID = '" & EmailData(i).GUID & "'"
+                JPTRS.lblStatus.Caption = "Clearing Queue..."
+                rs.Open strSQL1, cn_global, adOpenKeyset, adLockOptimistic
+                With rs
+                    .Delete
+                    .Update
+                End With
+                rs.Close
+            End If
+        Next i
+        ReDim EmailData(0)
+    Else
+        If bolVerbose Then ToLog "Clearing GUID " & strGUID & " from Queue..."
+        strSQL1 = "SELECT * From emailqueue Where idGUID = '" & strGUID & "'"
+        rs.Open strSQL1, cn_global, adOpenKeyset, adLockOptimistic
+        With rs
+            .Delete
+            .Update
+        End With
+        rs.Close
+    End If
+    Exit Sub
+errs:
+    ToLog "Error Clearing Queue!"
+    ToLog "ERROR DTL:  SUB = ClearEmailQueue | " & Err.Number & " - " & Err.Description
+End Sub
 Public Function ConnectToDB() As Boolean
     On Error GoTo errs
     ConnectToDB = False
@@ -134,25 +222,6 @@ Public Function ConnectToDB() As Boolean
     Exit Function
 errs:
     ErrHandle Err.Number, Err.Description, "ConnectToDB"
-End Function
-' Returns an array with the local IP addresses (as strings).
-' Author: Christian d'Heureuse, www.source-code.biz
-Public Function GetIpAddrTable()
-    Dim Buf(0 To 511) As Byte
-    Dim BufSize       As Long: BufSize = UBound(Buf) + 1
-    Dim rc            As Long
-    rc = GetIpAddrTable_API(Buf(0), BufSize, 1)
-    If rc <> 0 Then Err.Raise vbObjectError, , "GetIpAddrTable failed with return value " & rc
-    Dim NrOfEntries As Integer: NrOfEntries = Buf(1) * 256 + Buf(0)
-    If NrOfEntries = 0 Then GetIpAddrTable = Array(): Exit Function
-    ReDim IpAddrs(0 To NrOfEntries - 1) As String
-    Dim i As Integer
-    For i = 0 To NrOfEntries - 1
-        Dim j As Integer, s As String: s = ""
-        For j = 0 To 3: s = s & IIf(j > 0, ".", "") & Buf(4 + i * 24 + j): Next
-        IpAddrs(i) = s
-    Next
-    GetIpAddrTable = IpAddrs
 End Function
 Public Function ConvertTime(ByVal lngMS As Long) As String
     Dim lngSeconds As Long, lngDays As Long, lngHours As Long, lngMins As Long
@@ -168,72 +237,6 @@ Public Function ConvertTime(ByVal lngMS As Long) As String
     If lngDays <> 1 Then strDays = "s"
     ConvertTime = lngDays & " days,  " & lngHours & ":" & lngMins & ":" & lngSeconds
 End Function
-Public Sub Wait(ByVal DurationMS As Long)
-    Dim EndTime As Long
-    EndTime = GetTickCount + DurationMS
-    Do While EndTime > GetTickCount
-        DoEvents
-        Sleep 1
-    Loop
-End Sub
-Public Sub GetUserIndex()
-    Dim rs      As New ADODB.Recordset
-    Dim strSQL1 As String
-    Dim i       As Integer
-    strSQL1 = "select * from users"
-    cn_global.CursorLocation = adUseClient
-    rs.Open strSQL1, cn_global, adOpenKeyset
-    i = 1
-    ReDim strUserIndex(2, rs.RecordCount)
-    Do Until rs.EOF
-        With rs
-            strUserIndex(0, i) = UCase$(!idUsers)
-            strUserIndex(1, i) = !idFullname
-            strUserIndex(2, i) = !idEmail
-            i = i + 1
-            rs.MoveNext
-        End With
-    Loop
-End Sub
-Public Function GetEmail(strUsername As String) As String
-    Dim i As Integer
-    For i = 0 To UBound(strUserIndex, 2)
-        If strUserIndex(0, i) = strUsername Then
-            GetEmail = UCase$(strUserIndex(2, i))
-            Exit Function
-        End If
-    Next i
-End Function
-Public Function GetFullName(strUsername As String) As String
-    Dim i As Integer
-    For i = 0 To UBound(strUserIndex, 2)
-        If strUserIndex(0, i) = strUsername Then
-            GetFullName = UCase$(strUserIndex(1, i))
-            Exit Function
-        End If
-    Next i
-End Function
-Public Sub FindMySQLDriver()
-    ToLog "Scanning for MySQL Driver..."
-    GetODBCDrivers
-    Dim i           As Integer
-    Dim strPossis() As String
-    Dim blah
-    ReDim strPossis(0)
-    For i = 1 To GetODBCDrivers.Count
-        If InStr(1, GetODBCDrivers.Item(i), "MySQL") Then
-            strPossis(UBound(strPossis)) = GetODBCDrivers.Item(i)
-            ReDim Preserve strPossis(UBound(strPossis) + 1)
-        End If
-    Next i
-    If UBound(strPossis) > 1 Then
-        blah = MsgBox("Multiple MySQL Drivers detected!", vbExclamation + vbOKOnly, "Gasp!")
-        strSQLDriver = strPossis(0)
-    Else
-        strSQLDriver = strPossis(0)
-    End If
-    ToLog "MySQL Driver = " & strSQLDriver
-End Sub
 Function EnumRegistryValues(ByVal hKey As Long, ByVal KeyName As String) As Collection
     Dim handle            As Long
     Dim Index             As Long
@@ -304,78 +307,40 @@ Function EnumRegistryValues(ByVal hKey As Long, ByVal KeyName As String) As Coll
     ' Close the key, if it was actually opened
     If handle Then RegCloseKey handle
 End Function
-Function GetODBCDrivers() As Collection
-    Dim res    As Collection
-    Dim values As Variant
-    ' initialize the result
-    Set GetODBCDrivers = New Collection
-    ' the names of all the ODBC drivers are kept as values
-    ' under a registry key
-    ' the EnumRegistryValue returns a collection
-    For Each values In EnumRegistryValues(HKEY_LOCAL_MACHINE, "Software\ODBC\ODBCINST.INI\ODBC Drivers")
-        ' each element is a two-item array:
-        ' values(0) is the name, values(1) is the data
-        If StrComp(values(1), "Installed", 1) = 0 Then
-            ' if installed, add to the result collection
-            GetODBCDrivers.Add values(0), values(0)
+Public Sub ErrHandle(lngErrNum As Long, strErrDescription As String, strOrigSub As String)
+    Select Case lngErrNum
+        Case -2147467259, 3704
+            JPTRS.lblStatus.Caption = "Disconnected!"
+            If bolVerbose Then ToLog "ERROR DTL:  SUB = CheckQueue | " & Err.Number & " - " & Err.Description
+            ToLog "SQL Connection Lost!  Trying to Reconnect..."
+            Set cn_global = Nothing
+            If ConnectToDB Then
+                ToLog "Connected!"
+            End If
+        Case Else
+            ToLog lngErrNum & " - " & strErrDescription & " | " & strOrigSub
+    End Select
+End Sub
+Public Sub FindMySQLDriver()
+    ToLog "Scanning for MySQL Driver..."
+    GetODBCDrivers
+    Dim i           As Integer
+    Dim strPossis() As String
+    Dim blah
+    ReDim strPossis(0)
+    For i = 1 To GetODBCDrivers.Count
+        If InStr(1, GetODBCDrivers.Item(i), "MySQL") Then
+            strPossis(UBound(strPossis)) = GetODBCDrivers.Item(i)
+            ReDim Preserve strPossis(UBound(strPossis) + 1)
         End If
-    Next
-End Function
-Public Sub SendNotification(SendRec As String, _
-                            MailFrom As String, _
-                            MailTo As String, _
-                            JobNum As String, _
-                            strDescrip As String, _
-                            strPartNum As String, _
-                            strCustomer As String, _
-                            strCreator As String, _
-                            strCreateDate As String, _
-                            strComment As String, _
-                            strTimeStamp As String)
-    On Error GoTo errs
-    Dim iConf As New CDO.Configuration
-    Dim Flds  As ADODB.Fields
-    Dim iMsg  As New CDO.Message
-    Set Flds = iConf.Fields
-    ' Set the configuration
-    Flds(cdoSendUsingMethod) = cdoSendUsingPort
-    Flds(cdoSMTPServer) = strSMTPServer
-    Flds(cdoSMTPServerPort) = 25
-    Flds(cdoSMTPConnectionTimeout) = 30
-    ' ... other settings
-    Flds.Update
-    With iMsg
-        Set .Configuration = iConf
-        .Sender = GetEmail(MailFrom)
-        .To = GetEmail(MailTo)
-        .From = GetEmail(MailFrom)
-        If UCase$(SendRec) = "SEND" Then
-            .Subject = "JPT: " & GetFullName(MailFrom) & " sent you a packet  (" & JobNum & ")"
-        ElseIf UCase$(SendRec) = "REC" Then
-            .Subject = "JPT: " & GetFullName(MailFrom) & " received a packet  (" & JobNum & ")"
-        End If
-        .HTMLBody = GenerateHTML(SendRec, GetFullName(MailFrom), MailTo, JobNum, strDescrip, strPartNum, strCustomer, strCreator, strCreateDate, strComment, strTimeStamp)
-        '.TextBody = Message
-        .Send
-    End With
-    Set iMsg = Nothing
-    Set iConf = Nothing
-    Set Flds = Nothing
-    Exit Sub
-errs:
-    ToLog "Failed to send EMail notification!"
-    If bolVerbose Then ToLog "ERROR DTL:  SUB = SendNotification | " & Err.Number & " - " & Err.Description
-    If Err.Number = -2147220973 Then 'if failed to connect then clear successful deliveries and try again
-        ToLog "Could not establish connection. Clearing successful from queue and retrying..."
-        lngRetries = lngRetries + 1
-        ClearEmailQueue
-        CheckQueue
+    Next i
+    If UBound(strPossis) > 1 Then
+        blah = MsgBox("Multiple MySQL Drivers detected!", vbExclamation + vbOKOnly, "Gasp!")
+        strSQLDriver = strPossis(0)
+    Else
+        strSQLDriver = strPossis(0)
     End If
-    If Err.Number = -2147220974 Then 'if lost connection, the email still made it, so fail softly and continue
-        ToLog "Lost connection after send, probably... Moving on..."
-        lngSuccess = lngSuccess + 1
-        Resume Next
-    End If
+    ToLog "MySQL Driver = " & strSQLDriver
 End Sub
 Public Function GenerateHTML(strSendOrRec As String, _
                              strFrom As String, _
@@ -487,78 +452,111 @@ errs:
     ToLog "Failed to Genterate HTML!"
     If bolVerbose Then ToLog "ERROR DTL:  SUB = GenerateHTML | " & Err.Number & " - " & Err.Description
 End Function
-Public Sub CheckQueue()
-    On Error GoTo errs
-    Dim tmpGUID As String
+Public Function GetEmail(strUsername As String) As String
+    Dim i As Integer
+    For i = 0 To UBound(strUserIndex, 2)
+        If strUserIndex(0, i) = strUsername Then
+            GetEmail = UCase$(strUserIndex(2, i))
+            Exit Function
+        End If
+    Next i
+End Function
+Public Function GetFullName(strUsername As String) As String
+    Dim i As Integer
+    For i = 0 To UBound(strUserIndex, 2)
+        If strUserIndex(0, i) = strUsername Then
+            GetFullName = UCase$(strUserIndex(1, i))
+            Exit Function
+        End If
+    Next i
+End Function
+' Returns an array with the local IP addresses (as strings).
+' Author: Christian d'Heureuse, www.source-code.biz
+Public Function GetIpAddrTable()
+    Dim Buf(0 To 511) As Byte
+    Dim BufSize       As Long: BufSize = UBound(Buf) + 1
+    Dim rc            As Long
+    rc = GetIpAddrTable_API(Buf(0), BufSize, 1)
+    If rc <> 0 Then Err.Raise vbObjectError, , "GetIpAddrTable failed with return value " & rc
+    Dim NrOfEntries As Integer: NrOfEntries = Buf(1) * 256 + Buf(0)
+    If NrOfEntries = 0 Then GetIpAddrTable = Array(): Exit Function
+    ReDim IpAddrs(0 To NrOfEntries - 1) As String
+    Dim i As Integer
+    For i = 0 To NrOfEntries - 1
+        Dim j As Integer, s As String: s = ""
+        For j = 0 To 3: s = s & IIf(j > 0, ".", "") & Buf(4 + i * 24 + j): Next
+        IpAddrs(i) = s
+    Next
+    GetIpAddrTable = IpAddrs
+End Function
+Function GetODBCDrivers() As Collection
+    Dim res    As Collection
+    Dim values As Variant
+    ' initialize the result
+    Set GetODBCDrivers = New Collection
+    ' the names of all the ODBC drivers are kept as values
+    ' under a registry key
+    ' the EnumRegistryValue returns a collection
+    For Each values In EnumRegistryValues(HKEY_LOCAL_MACHINE, "Software\ODBC\ODBCINST.INI\ODBC Drivers")
+        ' each element is a two-item array:
+        ' values(0) is the name, values(1) is the data
+        If StrComp(values(1), "Installed", 1) = 0 Then
+            ' if installed, add to the result collection
+            GetODBCDrivers.Add values(0), values(0)
+        End If
+    Next
+End Function
+Public Sub GetUserIndex()
     Dim rs      As New ADODB.Recordset
     Dim strSQL1 As String
+    Dim i       As Integer
+    strSQL1 = "select * from users"
     cn_global.CursorLocation = adUseClient
-    strSQL1 = "SELECT * FROM emailqueue d LEFT JOIN packetlist c ON c.idJobNum = d.idJobNum"
-    Set rs = cn_global.Execute(strSQL1)
-    If rs.RecordCount = 0 Then
-        Exit Sub
-    Else
-        ToLog rs.RecordCount & " Email(s) found in queue.  Parsing..."
-    End If
-    ReDim EmailData(rs.RecordCount)
+    rs.Open strSQL1, cn_global, adOpenKeyset
+    i = 1
+    ReDim strUserIndex(2, rs.RecordCount)
     Do Until rs.EOF
         With rs
-            tmpGUID = .Fields(5)
-            EmailData(.AbsolutePosition - 1).GUID = tmpGUID
-            EmailData(.AbsolutePosition - 1).SendOrRec = !idSendOrRec
-            EmailData(.AbsolutePosition - 1).strFrom = !idFrom
-            EmailData(.AbsolutePosition - 1).strTo = !idTo
-            EmailData(.AbsolutePosition - 1).JobNum = !idJobNum
-            EmailData(.AbsolutePosition - 1).PartNum = !idPartNum
-            EmailData(.AbsolutePosition - 1).Customer = !idCustPONum
-            EmailData(.AbsolutePosition - 1).Comment = !idComment
-            EmailData(.AbsolutePosition - 1).Creator = !idCreator
-            EmailData(.AbsolutePosition - 1).CreateDate = !idCreateDate
-            EmailData(.AbsolutePosition - 1).Description = !idDescription
-            EmailData(.AbsolutePosition - 1).Delivered = False
-            EmailData(.AbsolutePosition - 1).TimeStamp = !idTimeStamp
-            .MoveNext
+            strUserIndex(0, i) = UCase$(!idUsers)
+            strUserIndex(1, i) = !idFullname
+            strUserIndex(2, i) = !idEmail
+            i = i + 1
+            rs.MoveNext
         End With
     Loop
-    rs.Close
-    SendEmails
-    ClearEmailQueue
-    ToLog "Done..."
-    Exit Sub
-errs:
-    ToLog "Error Checking Queue!"
-    ErrHandle Err.Number, Err.Description, "CheckQueue"
-    If Err.Number = 94 Then
-        ToLog "Null values detected! Packet data missing. Clearing single item from queue."
-        ClearEmailQueue tmpGUID
+End Sub
+Public Function OKToRun() As Boolean
+    Dim Flag As Boolean
+    Flag = CBool(GetSetting(App.EXEName, "WeeklyReportSent", "Sent", 0))
+    OKToRun = False
+    If Weekday(Now) = DayToRun And Flag Then
+        OKToRun = False
+    ElseIf Weekday(Now) <> DayToRun And Flag Then
+        OKToRun = False
+        SaveSetting App.EXEName, "WeeklyReportSent", "Sent", "FALSE"
+    ElseIf Weekday(Now) <> DayToRun And Not Flag Then
+        OKToRun = False
+    ElseIf Weekday(Now) = DayToRun And Not Flag Then
+        OKToRun = True
     End If
-End Sub
-Public Sub ErrHandle(lngErrNum As Long, strErrDescription As String, strOrigSub As String)
-    Select Case lngErrNum
-        Case -2147467259, 3704
-            JPTRS.lblStatus.Caption = "Disconnected!"
-            If bolVerbose Then ToLog "ERROR DTL:  SUB = CheckQueue | " & Err.Number & " - " & Err.Description
-            ToLog "SQL Connection Lost!  Trying to Reconnect..."
-            Set cn_global = Nothing
-            If ConnectToDB Then
-                ToLog "Connected!"
-            End If
-        Case Else
-            ToLog lngErrNum & " - " & strErrDescription & " | " & strOrigSub
-    End Select
-End Sub
-Public Sub ToLog(Message As String)
-    Dim tmpMsg As String
-    If Dir$(strLogLoc, vbDirectory) = "" Then MkDir strLogLoc 'Environ$("APPDATA") & "\JPTRS\"
-    Open strLogLoc & "\LOG.LOG" For Append As #1
-    With JPTRS
-        tmpMsg = DateTime.Date & " " & DateTime.Time & ": " & Message
-        .lstLog.AddItem tmpMsg, 0
-        Print #1, tmpMsg
-        Close #1
-        ' DoEvents
+    JPTRS.lblReportStatus.Caption = Str(Flag)
+End Function
+Public Function ReportRecpts() As String
+    ReportRecpts = ""
+    Dim tmpRecpts As String
+    Dim rs        As New ADODB.Recordset
+    Dim strSQL1   As String
+    cn_global.CursorLocation = adUseClient
+    strSQL1 = "SELECT * FROM users WHERE idJPTReport = '1'"
+    Set rs = cn_global.Execute(strSQL1)
+    With rs
+        Do Until .EOF
+            tmpRecpts = tmpRecpts + !idEmail + ";"
+            .MoveNext
+        Loop
     End With
-End Sub
+    ReportRecpts = tmpRecpts
+End Function
 Public Sub SendEmails()
     On Error GoTo errs
     Dim i As Integer
@@ -578,41 +576,143 @@ errs:
     ToLog "Error Sending Emails!"
     ToLog "ERROR DTL:  SUB = SendEmails | " & Err.Number & " - " & Err.Description
 End Sub
-Public Sub ClearEmailQueue(Optional strGUID As String)
+Public Function SendNotification(SendRec As String, _
+                                 MailFrom As String, _
+                                 MailTo As String, _
+                                 JobNum As String, _
+                                 strDescrip As String, _
+                                 strPartNum As String, _
+                                 strCustomer As String, _
+                                 strCreator As String, _
+                                 strCreateDate As String, _
+                                 strComment As String, _
+                                 strTimeStamp As String, _
+                                 Optional bolRetry As Boolean) As Boolean
+    Debug.Print bolRetry
     On Error GoTo errs
-    Dim i       As Integer
-    Dim rs      As New ADODB.Recordset
-    Dim strSQL1 As String
-    cn_global.CursorLocation = adUseClient
-    If strGUID = "" Then
-        If bolVerbose Then ToLog "Clearing Queue..."
-        For i = 0 To UBound(EmailData) - 1
-            If EmailData(i).Delivered Then
-                strSQL1 = "SELECT * From emailqueue Where idGUID = '" & EmailData(i).GUID & "'"
-                JPTRS.lblStatus.Caption = "Clearing Queue..."
-                rs.Open strSQL1, cn_global, adOpenKeyset, adLockOptimistic
-                With rs
-                    .Delete
-                    .Update
-                End With
-                rs.Close
-            End If
-        Next i
-        ReDim EmailData(0)
-    Else
-        If bolVerbose Then ToLog "Clearing GUID " & strGUID & " from Queue..."
-        strSQL1 = "SELECT * From emailqueue Where idGUID = '" & strGUID & "'"
-        rs.Open strSQL1, cn_global, adOpenKeyset, adLockOptimistic
-        With rs
-            .Delete
-            .Update
-        End With
-        rs.Close
+    Dim iConf As New CDO.Configuration
+    Dim Flds  As ADODB.Fields
+    Dim iMsg  As New CDO.Message
+    Set Flds = iConf.Fields
+    ' Set the configuration
+    Flds(cdoSendUsingMethod) = cdoSendUsingPort
+    Flds(cdoSMTPServer) = strSMTPServer
+    Flds(cdoSMTPServerPort) = 25
+    Flds(cdoSMTPConnectionTimeout) = 30
+    ' ... other settings
+    Flds.Update
+    With iMsg
+        Set .Configuration = iConf
+        .Sender = GetEmail(MailFrom)
+        .To = GetEmail(MailTo)
+        .From = GetEmail(MailFrom)
+        If UCase$(SendRec) = "SEND" Then
+            .Subject = "JPT: " & GetFullName(MailFrom) & " sent you a packet  (" & JobNum & ")"
+        ElseIf UCase$(SendRec) = "REC" Then
+            .Subject = "JPT: " & GetFullName(MailFrom) & " received a packet  (" & JobNum & ")"
+        End If
+        .HTMLBody = GenerateHTML(SendRec, GetFullName(MailFrom), MailTo, JobNum, strDescrip, strPartNum, strCustomer, strCreator, strCreateDate, strComment, strTimeStamp)
+        '.TextBody = Message
+        .Send
+    End With
+    Set iMsg = Nothing
+    Set iConf = Nothing
+    Set Flds = Nothing
+    SendNotification = True
+    Exit Function
+errs:
+    ToLog "Failed to send EMail notification!"
+    If bolVerbose Then ToLog "ERROR DTL:  SUB = SendNotification | " & Err.Number & " - " & Err.Description
+    If Err.Number = -2147220980 Or Err.Number = -2147220979 And Not bolRetry Then
+        ToLog "Email address(s) not found. Refreshing user index and trying again..."
+        GetUserIndex
+        ToLog "User Index Refreshed..."
+        ToLog "Retrying..."
+        SendNotification SendRec, MailFrom, MailTo, JobNum, strDescrip, strPartNum, strCustomer, strCreator, strCreateDate, strComment, strTimeStamp, True
     End If
+    If Err.Number = -2147220973 Then 'if failed to connect then clear successful deliveries and try again
+        ToLog "Could not establish connection. Clearing successful from queue and retrying..."
+        lngRetries = lngRetries + 1
+        ClearEmailQueue
+        CheckQueue
+    End If
+    If Err.Number = -2147220974 Then 'if lost connection, the email still made it, so fail softly and continue
+        ToLog "Lost connection after send, probably... Moving on..."
+        lngSuccess = lngSuccess + 1
+        Resume Next
+    End If
+End Function
+Public Sub SendReport(MailFrom As String, MailTo As String)
+    ToLog "Sending Weekly Report...  (" & dtStartDate & " to " & dtEndDate & ")"
+    On Error GoTo errs
+    Dim iConf As New CDO.Configuration
+    Dim Flds  As ADODB.Fields
+    Dim iMsg  As New CDO.Message
+    Set Flds = iConf.Fields
+    ' Set the configuration
+    Flds(cdoSendUsingMethod) = cdoSendUsingPort
+    Flds(cdoSMTPServer) = strSMTPServer
+    Flds(cdoSMTPConnectionTimeout) = 30
+    ' ... other settings
+    Flds.Update
+    With iMsg
+        Set .Configuration = iConf
+        .Sender = MailFrom 'GetEmail(MailFrom)
+        .To = MailTo 'GetEmail(MailTo)
+        .From = MailFrom 'GetEmail(MailFrom)
+        .Subject = "JPT: Weekly Report (" & dtStartDate & " to " & dtEndDate & ")"
+        .HTMLBody = strReportHTML
+        '.TextBody = Message
+        .Send
+    End With
+    Set iMsg = Nothing
+    Set iConf = Nothing
+    Set Flds = Nothing
+    'Set registry flag telling me that the report for this week has been sent
+    SaveSetting App.EXEName, "WeeklyReportSent", "Sent", "TRUE"
+    ToLog "Report Sent..."
     Exit Sub
 errs:
-    ToLog "Error Clearing Queue!"
-    ToLog "ERROR DTL:  SUB = ClearEmailQueue | " & Err.Number & " - " & Err.Description
+    ToLog "Failed to send Weekly Report!"
+    If bolVerbose Then ToLog "ERROR DTL:  SUB = SendReport | " & Err.Number & " - " & Err.Description
+End Sub
+Public Function strDayOfWeek(intDayOfWeek As Integer) As String
+    Select Case intDayOfWeek
+        Case 1
+            strDayOfWeek = "Sunday"
+        Case 2
+            strDayOfWeek = "Monday"
+        Case 3
+            strDayOfWeek = "Tuesday"
+        Case 4
+            strDayOfWeek = "Wednesday"
+        Case 5
+            strDayOfWeek = "Thursday"
+        Case 6
+            strDayOfWeek = "Friday"
+        Case 7
+            strDayOfWeek = "Saturday"
+    End Select
+End Function
+Public Sub ToLog(Message As String)
+    Dim tmpMsg As String
+    If Dir$(strLogLoc, vbDirectory) = "" Then MkDir strLogLoc 'Environ$("APPDATA") & "\JPTRS\"
+    Open strLogLoc & "\LOG.LOG" For Append As #1
+    With JPTRS
+        tmpMsg = DateTime.Date & " " & DateTime.Time & ": " & Message
+        .lstLog.AddItem tmpMsg, 0
+        Print #1, tmpMsg
+        Close #1
+        ' DoEvents
+    End With
+End Sub
+Public Sub Wait(ByVal DurationMS As Long)
+    Dim EndTime As Long
+    EndTime = GetTickCount + DurationMS
+    Do While EndTime > GetTickCount
+        DoEvents
+        Sleep 1
+    Loop
 End Sub
 Public Sub WeeklyReportGetData()
     Dim lngTIS  As Long
@@ -676,6 +776,22 @@ Public Sub WeeklyReportGetData()
     WeeklyReportParseHTML
     SendReport "JPTReportServer@worthingtonindustries.com", ReportRecpts
 End Sub
+Public Sub WeeklyReportParseCSV()
+    On Error GoTo errs
+    Dim strCSVName As String, strCSVFullName As String
+    Dim i          As Integer
+    strCSVName = Format$(DateTime.Date & " " & DateTime.Time, "YYYY-MM-DD-hh-mm-ss") & ".csv"
+    strCSVFullName = strCSVLoc & strCSVName
+    Open strCSVFullName For Append As #2
+    For i = 0 To UBound(ReportData)
+        Print #2, ReportData(i).Action & "," & ReportData(i).JobNum & "," & ReportData(i).Description & "," & ReportData(i).Customer & "," & ReportData(i).JobNum & "," & ReportData(i).Creator & "," & ReportData(i).CreateDate
+    Next
+    Close #2
+    Exit Sub
+errs:
+    ToLog "Failed while parsing Weekly Report!"
+    If bolVerbose Then ToLog "ERROR DTL:  SUB = WeeklyReportParseCSV | " & Err.Number & " - " & Err.Description
+End Sub
 Public Sub WeeklyReportParseHTML()
     On Error GoTo errs
     ToLog "Parsing report to HTML..."
@@ -714,104 +830,4 @@ Public Sub WeeklyReportParseHTML()
 errs:
     ToLog "Failed while parsing Weekly Report HTML!"
     If bolVerbose Then ToLog "ERROR DTL:  SUB =  WeeklyReportParseHTML | " & Err.Number & " - " & Err.Description
-End Sub
-Public Sub SendReport(MailFrom As String, MailTo As String)
-    ToLog "Sending Weekly Report...  (" & dtStartDate & " to " & dtEndDate & ")"
-    On Error GoTo errs
-    Dim iConf As New CDO.Configuration
-    Dim Flds  As ADODB.Fields
-    Dim iMsg  As New CDO.Message
-    Set Flds = iConf.Fields
-    ' Set the configuration
-    Flds(cdoSendUsingMethod) = cdoSendUsingPort
-    Flds(cdoSMTPServer) = strSMTPServer
-    Flds(cdoSMTPConnectionTimeout) = 30
-    ' ... other settings
-    Flds.Update
-    With iMsg
-        Set .Configuration = iConf
-        .Sender = MailFrom 'GetEmail(MailFrom)
-        .To = MailTo 'GetEmail(MailTo)
-        .From = MailFrom 'GetEmail(MailFrom)
-        .Subject = "JPT: Weekly Report (" & dtStartDate & " to " & dtEndDate & ")"
-        .HTMLBody = strReportHTML
-        '.TextBody = Message
-        .Send
-    End With
-    Set iMsg = Nothing
-    Set iConf = Nothing
-    Set Flds = Nothing
-    'Set registry flag telling me that the report for this week has been sent
-    SaveSetting App.EXEName, "WeeklyReportSent", "Sent", "TRUE"
-    ToLog "Report Sent..."
-    Exit Sub
-errs:
-    ToLog "Failed to send Weekly Report!"
-    If bolVerbose Then ToLog "ERROR DTL:  SUB = SendReport | " & Err.Number & " - " & Err.Description
-End Sub
-Public Function ReportRecpts() As String
-    ReportRecpts = ""
-    Dim tmpRecpts As String
-    Dim rs        As New ADODB.Recordset
-    Dim strSQL1   As String
-    cn_global.CursorLocation = adUseClient
-    strSQL1 = "SELECT * FROM users WHERE idJPTReport = '1'"
-    Set rs = cn_global.Execute(strSQL1)
-    With rs
-        Do Until .EOF
-            tmpRecpts = tmpRecpts + !idEmail + ";"
-            .MoveNext
-        Loop
-    End With
-    ReportRecpts = tmpRecpts
-End Function
-Public Function OKToRun() As Boolean
-    Dim Flag As Boolean
-    Flag = CBool(GetSetting(App.EXEName, "WeeklyReportSent", "Sent", 0))
-    OKToRun = False
-    If Weekday(Now) = DayToRun And Flag Then
-        OKToRun = False
-    ElseIf Weekday(Now) <> DayToRun And Flag Then
-        OKToRun = False
-        SaveSetting App.EXEName, "WeeklyReportSent", "Sent", "FALSE"
-    ElseIf Weekday(Now) <> DayToRun And Not Flag Then
-        OKToRun = False
-    ElseIf Weekday(Now) = DayToRun And Not Flag Then
-        OKToRun = True
-    End If
-    JPTRS.lblReportStatus.Caption = Str(Flag)
-End Function
-Public Function strDayOfWeek(intDayOfWeek As Integer) As String
-    Select Case intDayOfWeek
-        Case 1
-            strDayOfWeek = "Sunday"
-        Case 2
-            strDayOfWeek = "Monday"
-        Case 3
-            strDayOfWeek = "Tuesday"
-        Case 4
-            strDayOfWeek = "Wednesday"
-        Case 5
-            strDayOfWeek = "Thursday"
-        Case 6
-            strDayOfWeek = "Friday"
-        Case 7
-            strDayOfWeek = "Saturday"
-    End Select
-End Function
-Public Sub WeeklyReportParseCSV()
-    On Error GoTo errs
-    Dim strCSVName As String, strCSVFullName As String
-    Dim i          As Integer
-    strCSVName = Format$(DateTime.Date & " " & DateTime.Time, "YYYY-MM-DD-hh-mm-ss") & ".csv"
-    strCSVFullName = strCSVLoc & strCSVName
-    Open strCSVFullName For Append As #2
-    For i = 0 To UBound(ReportData)
-        Print #2, ReportData(i).Action & "," & ReportData(i).JobNum & "," & ReportData(i).Description & "," & ReportData(i).Customer & "," & ReportData(i).JobNum & "," & ReportData(i).Creator & "," & ReportData(i).CreateDate
-    Next
-    Close #2
-    Exit Sub
-errs:
-    ToLog "Failed while parsing Weekly Report!"
-    If bolVerbose Then ToLog "ERROR DTL:  SUB = WeeklyReportParseCSV | " & Err.Number & " - " & Err.Description
 End Sub

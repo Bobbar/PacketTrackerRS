@@ -114,7 +114,6 @@ Public Const DayToRun                As Long = vbMonday
 Public Const MinutesTillRefresh      As Long = 30 'Minutes between user list refresh
 Public Const MinutesTillStatusReport As Long = 720 'Minutes between status updates in log
 Public MinsCounted                   As Long
-Public lngUptime                     As Long
 Public strAPPTITLE                   As String
 Public lngAttempts                   As Long, lngSuccess As Long, lngRetries As Long
 Public lngStartTime                  As Long
@@ -124,10 +123,7 @@ Private Declare Function GetIpAddrTable_API _
                 Alias "GetIpAddrTable" (pIPAddrTable As Any, _
                                         pdwSize As Long, _
                                         ByVal bOrder As Long) As Long
-Declare Function QueryPerformanceCounter Lib "kernel32" (X As Currency) As Boolean
-Declare Function QueryPerformanceFrequency Lib "kernel32" (X As Currency) As Boolean
-Public total As Currency
-Public Ctr1  As Currency, Ctr2 As Currency, Freq As Currency
+Public dtRunDate As Date
 Public Sub CheckQueue()
     On Error GoTo errs
     Dim tmpGUID As String
@@ -223,10 +219,10 @@ Public Function ConnectToDB() As Boolean
 errs:
     ErrHandle Err.Number, Err.Description, "ConnectToDB"
 End Function
-Public Function ConvertTime(ByVal lngMS As Long) As String
+Public Function ConvertTime(ByVal CurDate As Date) As String
     Dim lngSeconds As Long, lngDays As Long, lngHours As Long, lngMins As Long
     Dim strSeconds As String, strDays As String
-    lngSeconds = lngMS / 1000
+    lngSeconds = DateDiff("s", dtRunDate, CurDate)
     lngDays = Int(lngSeconds / 86400)
     lngSeconds = lngSeconds Mod 86400
     lngHours = Int(lngSeconds / 3600)
@@ -317,8 +313,12 @@ Public Sub ErrHandle(lngErrNum As Long, strErrDescription As String, strOrigSub 
             If ConnectToDB Then
                 ToLog "Connected!"
             End If
+        Case 94
         Case Else
+            ToLog "######### Unhandled error! ###########"
             ToLog lngErrNum & " - " & strErrDescription & " | " & strOrigSub
+            ToLog "Ending..."
+            Call JPTRS.Form_QueryUnload(0, 0)
     End Select
 End Sub
 Public Sub FindMySQLDriver()

@@ -404,9 +404,7 @@ Private Sub cmdSendToTray_Click()
     minimize_to_tray
 End Sub
 Private Sub Form_Initialize()
-    'lngStartTime = GetTickCount
-    QueryPerformanceFrequency Freq
-    QueryPerformanceCounter Ctr1
+    dtRunDate = DateTime.Now
 End Sub
 Private Sub Form_Load()
     minimize_to_tray
@@ -445,7 +443,7 @@ Private Sub Form_MouseMove(Button As Integer, Shift As Integer, X As Single, y A
         Case WM_RBUTTONDBLCLK
     End Select
 End Sub
-Private Sub Form_QueryUnload(Cancel As Integer, UnloadMode As Integer)
+Public Sub Form_QueryUnload(Cancel As Integer, UnloadMode As Integer)
     On Error GoTo errs
     Dim blah
     ' blah = MsgBox("Are you sure you want to close the server!", vbOKCancel, "Are you sure?!")
@@ -453,7 +451,7 @@ Private Sub Form_QueryUnload(Cancel As Integer, UnloadMode As Integer)
         ToLog "Closing Server Application..."
         cn_global.Close
         ToLog "Global ADO Connection Closed..."
-        Unload Me
+        'Unload Me
         ToLog "Unloaded Form..."
         ToLog "Goodbye..."
         End
@@ -468,17 +466,23 @@ Private Sub Form_Unload(Cancel As Integer)
     Shell_NotifyIcon NIM_DELETE, nid ' del tray icon
 End Sub
 Private Sub tmrCheckQueue_Timer()
+    On Error GoTo errs
     JPTRS.lblStatus.Caption = "Idle..."
     CheckQueue
-    QueryPerformanceCounter Ctr2
-    lngUptime = 0
-    lngUptime = lngUptime + (Ctr2 - Ctr1) 'tmrCheckQueue.Interval
-    lngUptime = (lngUptime / Freq) * 1000
-    JPTRS.Caption = strAPPTITLE + " - Up " & ConvertTime(lngUptime)
+    'QueryPerformanceCounter Ctr2
+    'lngUptime = 0
+    'lngUptime = lngUptime + (Ctr2 - Ctr1) 'tmrCheckQueue.Interval
+    'lngUptime = (lngUptime / Freq) * 1000
+    'Debug.Print lngUptime
+    JPTRS.Caption = strAPPTITLE + " - Up " & ConvertTime(DateTime.Now)
     lblRequests.Caption = lngAttempts
     lblSuccess.Caption = lngSuccess
     lblRetries.Caption = lngRetries
     DoEvents
+    Exit Sub
+errs:
+    ErrHandle Err.Number, Err.Description, "CheckQueueTimer" 'ToLog Err.Number & " - " & Err.Description
+    Resume Next
 End Sub
 Private Sub tmrReportClock_Timer()
     lblTime = Now
@@ -498,7 +502,7 @@ Private Sub tmrTaskTimer_Timer()
     Else
     End If
     If CurrentInterval(MinsCounted, MinutesTillStatusReport) Then
-        ToLog "STATUS: Uptime: " & ConvertTime(lngUptime) & "    Atmpts, Sucss, Rtry: " & lngAttempts & ", " & lngSuccess & ", " & lngRetries
+        ToLog "STATUS: Uptime: " & ConvertTime(DateTime.Now) & "    Atmpts, Sucss, Rtry: " & lngAttempts & ", " & lngSuccess & ", " & lngRetries
     End If
     If MinsCounted >= 1440 Then MinsCounted = 0 'day has passed, start over
 End Sub

@@ -123,7 +123,9 @@ Private Declare Function GetIpAddrTable_API _
                 Alias "GetIpAddrTable" (pIPAddrTable As Any, _
                                         pdwSize As Long, _
                                         ByVal bOrder As Long) As Long
-Public dtRunDate As Date
+Public dtRunDate             As Date
+Public intRetryFail          As Integer
+Public Const intRetryFailMax As Integer = 5
 Public Sub CheckQueue()
     On Error GoTo errs
     Dim tmpGUID As String
@@ -200,12 +202,25 @@ Public Sub ClearEmailQueue(Optional strGUID As String)
             .Update
         End With
         rs.Close
+        RemoveFromArray strGUID
     End If
     Exit Sub
 errs:
     ToLog "Error Clearing Queue!"
     ToLog "ERROR DTL:  SUB = ClearEmailQueue | " & Err.Number & " - " & Err.Description
 End Sub
+Public Function RemoveFromArray(strGUID As String)
+    Dim i          As Integer
+    Dim tmpArray() As EmailInfo
+    For i = 0 To UBound(EmailData)
+        If EmailData(i).GUID <> strGUID Then
+            ReDim Preserve tmpArray(UBound(tmpArray) + 1)
+            tmpArray(UBound(tmpArray)) = EmailData(i)
+        End If
+    Next i
+    ReDim EmailData(UBound(tmpArray))
+    EmailData = tmpArray
+End Function
 Public Function ConnectToDB() As Boolean
     On Error GoTo errs
     ConnectToDB = False
@@ -561,10 +576,10 @@ Public Sub SendEmails()
     On Error GoTo errs
     Dim i As Integer
     For i = 0 To UBound(EmailData) - 1
-        If bolVerbose Then ToLog "Sending SMTP " & i + 1 & " of " & UBound(EmailData) & " : " & EmailData(i).SendOrRec & " - " & EmailData(i).strFrom & " - " & EmailData(i).strTo & " - " & EmailData(i).JobNum & " - " & EmailData(i).Description & " - " & EmailData(i).PartNum & " - " & EmailData(i).Customer & " - " & EmailData(i).Creator & " - " & EmailData(i).CreateDate & " - " & EmailData(i).Comment
+        If bolVerbose Then ToLog "Sending SMTP " & i + 1 & " of " & UBound(EmailData) & " : " & EmailData(i).TimeStamp & " - " & EmailData(i).SendOrRec & " - " & EmailData(i).strFrom & " - " & EmailData(i).strTo & " - " & EmailData(i).JobNum & " - " & EmailData(i).Description & " - " & EmailData(i).PartNum & " - " & EmailData(i).Customer & " - " & EmailData(i).Creator & " - " & EmailData(i).CreateDate & " - " & EmailData(i).Comment
         JPTRS.lblStatus.Caption = "Sending EMail...."
         lngAttempts = lngAttempts + 1
-        SendNotification EmailData(i).SendOrRec, EmailData(i).strFrom, EmailData(i).strTo, EmailData(i).JobNum, EmailData(i).Description, EmailData(i).PartNum, EmailData(i).Customer, EmailData(i).Creator, EmailData(i).CreateDate, EmailData(i).Comment, EmailData(i).TimeStamp
+        SendNotification EmailData(i).SendOrRec, EmailData(i).strFrom, EmailData(i).strTo, EmailData(i).JobNum, EmailData(i).Description, EmailData(i).PartNum, EmailData(i).Customer, EmailData(i).Creator, EmailData(i).CreateDate, EmailData(i).Comment, EmailData(i).TimeStamp, EmailData(i).GUID
         EmailData(i).Delivered = True
         lngSuccess = lngSuccess + 1
         JPTRS.lblStatus.Caption = "Waiting...."
@@ -587,6 +602,7 @@ Public Function SendNotification(SendRec As String, _
                                  strCreateDate As String, _
                                  strComment As String, _
                                  strTimeStamp As String, _
+                                 strGUID As String, _
                                  Optional bolRetry As Boolean) As Boolean
     Debug.Print bolRetry
     On Error GoTo errs
@@ -624,11 +640,21 @@ errs:
     ToLog "Failed to send EMail notification!"
     If bolVerbose Then ToLog "ERROR DTL:  SUB = SendNotification | " & Err.Number & " - " & Err.Description
     If Err.Number = -2147220980 Or Err.Number = -2147220979 And Not bolRetry Then
-        ToLog "Email address(s) not found. Refreshing user index and trying again..."
+        ToLog "Email address(s) not found. Waiting, Refreshing user index and trying again..."
+        ToLog "Waiting..."
+        Wait 5000 'intWaitTime
         GetUserIndex
         ToLog "User Index Refreshed..."
-        ToLog "Retrying..."
-        SendNotification SendRec, MailFrom, MailTo, JobNum, strDescrip, strPartNum, strCustomer, strCreator, strCreateDate, strComment, strTimeStamp, True
+        ToLog "Retrying... " & intRetryFail + 1 & " of " & intRetryFailMax
+        intRetryFail = intRetryFail + 1
+        If intRetryFail >= intRetryFailMax Then
+            intRetryFail = 0
+            ToLog "That's enough of that. Clearing bad notification:"
+            ToLog SendRec & " - " & MailFrom & " - " & MailTo & " - " & JobNum & " - " & strDescrip & " - " & strPartNum & " - " & strCustomer & " - " & strCreator & " - " & strCreateDate & " - " & strComment & " - " & strTimeStamp
+            ClearEmailQueue strGUID
+            Exit Function
+        End If
+        SendNotification SendRec, MailFrom, MailTo, JobNum, strDescrip, strPartNum, strCustomer, strCreator, strCreateDate, strComment, strTimeStamp, strGUID, True
     End If
     If Err.Number = -2147220973 Then 'if failed to connect then clear successful deliveries and try again
         ToLog "Could not establish connection. Clearing successful from queue and retrying..."

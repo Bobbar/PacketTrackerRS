@@ -465,6 +465,7 @@ End Sub
 Private Sub Form_Unload(Cancel As Integer)
     Shell_NotifyIcon NIM_DELETE, nid ' del tray icon
 End Sub
+
 Private Sub tmrCheckQueue_Timer()
     On Error GoTo errs
     JPTRS.lblStatus.Caption = "Idle..."
@@ -487,6 +488,16 @@ End Sub
 Private Sub tmrReportClock_Timer()
     lblTime = Now
     If OKToRun Then WeeklyReportGetData
+    
+    If EndOfDay Then
+    
+   DailyReportGetData
+   ' SaveSetting App.EXEName, "DailyReportSent", "Sent", "TRUE"
+    End If
+    
+    
+    
+    
     lblRptDay.Caption = strDayOfWeek(DayToRun)
     lblCurDay.Caption = strDayOfWeek(Weekday(Now))
 End Sub

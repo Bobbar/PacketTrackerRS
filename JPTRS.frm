@@ -425,6 +425,7 @@ Private Sub Form_Load()
     ToLog "Getting User List..."
     GetUserIndex
     ToLog "Ready!..."
+
 End Sub
 Private Sub Form_MouseMove(Button As Integer, Shift As Integer, X As Single, y As Single)
     Dim msg     As Long
@@ -465,16 +466,10 @@ End Sub
 Private Sub Form_Unload(Cancel As Integer)
     Shell_NotifyIcon NIM_DELETE, nid ' del tray icon
 End Sub
-
 Private Sub tmrCheckQueue_Timer()
     On Error GoTo errs
     JPTRS.lblStatus.Caption = "Idle..."
     CheckQueue
-    'QueryPerformanceCounter Ctr2
-    'lngUptime = 0
-    'lngUptime = lngUptime + (Ctr2 - Ctr1) 'tmrCheckQueue.Interval
-    'lngUptime = (lngUptime / Freq) * 1000
-    'Debug.Print lngUptime
     JPTRS.Caption = strAPPTITLE + " - Up " & ConvertTime(DateTime.Now)
     lblRequests.Caption = lngAttempts
     lblSuccess.Caption = lngSuccess
@@ -488,16 +483,9 @@ End Sub
 Private Sub tmrReportClock_Timer()
     lblTime = Now
     If OKToRun Then WeeklyReportGetData
-    
-    If EndOfDay Then
-    
-   DailyReportGetData
-   ' SaveSetting App.EXEName, "DailyReportSent", "Sent", "TRUE"
+    If TimeForDaily Then
+        RunDailyReport
     End If
-    
-    
-    
-    
     lblRptDay.Caption = strDayOfWeek(DayToRun)
     lblCurDay.Caption = strDayOfWeek(Weekday(Now))
 End Sub

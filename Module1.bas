@@ -833,7 +833,7 @@ Public Sub SendReport(intReportType As Integer, MailFrom As String, MailTo As St
         If intReportType = Weekly Then
             .Subject = "JPT: Weekly Report (" & dtStartDate & " to " & dtEndDate & ")"
         ElseIf intReportType = Daily Then
-            .Subject = "JPT: Daily Report (" & dtStartDate & ")"
+            .Subject = "JPT: Daily Report (" & dtEndDate & ")"
         End If
         .HTMLBody = strReportHTML
         '.TextBody = Message

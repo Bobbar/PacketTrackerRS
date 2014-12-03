@@ -989,8 +989,8 @@ Public Sub DailyReportGetData(Filters As String)
     strSQL1 = "SELECT * FROM packetlist d LEFT JOIN packetentrydb c ON c.idJobNum = d.idJobNum WHERE idDate = (SELECT MAX(idDate) FROM packetentrydb c2 Where c2.idJobNum = d.idJobNum) AND idStatus='OPEN' ORDER BY idDate DESC LIMIT 50"
     ToLog "Starting Daily Report... Filters = " & FilterString(Filters)
     Set rs = cn_global.Execute(strSQL1)
-    dtStartDate = DateAdd("d", -1, DateTime.Date)
-    dtEndDate = DateTime.Date 'DateAdd("d", -3, DateTime.Date)
+    dtStartDate = DateTime.Date
+    dtEndDate = DateTime.Date
     If rs.RecordCount < 1 Then Exit Sub
     ReDim ReportData(0)
     With rs

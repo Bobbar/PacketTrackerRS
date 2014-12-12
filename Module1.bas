@@ -44,6 +44,10 @@ Const REG_DWORD = 4
 Const REG_MULTI_SZ = 7
 Const ERROR_MORE_DATA = 234
 Const KEY_READ = &H20019 ' ((READ_CONTROL Or KEY_QUERY_VALUE Or
+Public Type NotificationReturnType
+    Sent As Boolean
+    Trash As Boolean
+End Type
 Public Type EmailInfo
     SendOrRec As String
     strFrom As String
@@ -56,8 +60,9 @@ Public Type EmailInfo
     Creator As String
     CreateDate As String
     GUID As String
-    Delivered As Boolean
+    Status As NotificationReturnType
     TimeStamp As String
+    'Trash As Boolean
 End Type
 Public Type ReportInfo
     Action As String
@@ -191,12 +196,6 @@ Public Sub GetReportGroups() 'create a list of report groups with list a users i
             End If
         End If
     Next a
-'    For a = 1 To UBound(ReportsGroups)
-'        Debug.Print ReportsGroups(a).Filters
-'        For b = 0 To UBound(ReportsGroups(a).Userlist)
-'            Debug.Print ReportsGroups(a).Userlist(b).UserName
-'        Next b
-'    Next a
 End Sub
 Private Sub NewGroup(GroupIndex() As GroupAttribs, _
                      UserIndex() As UserAttributes, _
@@ -242,6 +241,7 @@ Public Sub CheckQueue()
     Dim tmpGUID As String
     Dim rs      As New ADODB.Recordset
     Dim strSQL1 As String
+    Dim intPos  As Integer
     cn_global.CursorLocation = adUseClient
     strSQL1 = "SELECT * FROM emailqueue d LEFT JOIN packetlist c ON c.idJobNum = d.idJobNum"
     Set rs = cn_global.Execute(strSQL1)
@@ -254,19 +254,21 @@ Public Sub CheckQueue()
     Do Until rs.EOF
         With rs
             tmpGUID = .Fields(5)
-            EmailData(.AbsolutePosition - 1).GUID = tmpGUID
-            EmailData(.AbsolutePosition - 1).SendOrRec = !idSendOrRec
-            EmailData(.AbsolutePosition - 1).strFrom = !idFrom
-            EmailData(.AbsolutePosition - 1).strTo = !idTo
-            EmailData(.AbsolutePosition - 1).JobNum = !idJobNum
-            EmailData(.AbsolutePosition - 1).PartNum = !idPartNum
-            EmailData(.AbsolutePosition - 1).Customer = !idCustPONum
-            EmailData(.AbsolutePosition - 1).Comment = !idComment
-            EmailData(.AbsolutePosition - 1).Creator = !idCreator
-            EmailData(.AbsolutePosition - 1).CreateDate = !idCreateDate
-            EmailData(.AbsolutePosition - 1).Description = !idDescription
-            EmailData(.AbsolutePosition - 1).Delivered = False
-            EmailData(.AbsolutePosition - 1).TimeStamp = !idTimeStamp
+            intPos = .AbsolutePosition - 1
+            EmailData(intPos).GUID = tmpGUID
+            EmailData(intPos).SendOrRec = !idSendOrRec
+            EmailData(intPos).strFrom = !idFrom
+            EmailData(intPos).strTo = !idTo
+            EmailData(intPos).JobNum = !idJobNum
+            EmailData(intPos).PartNum = !idPartNum
+            EmailData(intPos).Customer = !idCustPONum
+            EmailData(intPos).Comment = !idComment
+            EmailData(intPos).Creator = !idCreator
+            EmailData(intPos).CreateDate = !idCreateDate
+            EmailData(intPos).Description = !idDescription
+            EmailData(intPos).Status.Sent = False
+            EmailData(intPos).Status.Trash = False
+            EmailData(intPos).TimeStamp = !idTimeStamp
             .MoveNext
         End With
     Loop
@@ -276,12 +278,38 @@ Public Sub CheckQueue()
     ToLog "Done..."
     Exit Sub
 errs:
-    ToLog "Error Checking Queue!"
+    ToLog "***** Error Checking Queue! *****"
     ErrHandle Err.Number, Err.Description, "CheckQueue"
     If Err.Number = 94 Then
-        ToLog "Null values detected! Packet data missing. Clearing single item from queue."
+        ToLog "***** Null or invalid values detected! Packet data corrupt. Clearing single item from queue. *****"
         ClearEmailQueue tmpGUID
+        CheckQueue
     End If
+End Sub
+Public Sub FixEmailQueue()
+    On Error GoTo errs
+    Dim i       As Integer
+    Dim rs      As New ADODB.Recordset
+    Dim strSQL1 As String
+    cn_global.CursorLocation = adUseClient
+    If bolVerbose Then ToLog "Fixing Queue..."
+    For i = 0 To UBound(EmailData) - 1
+        If Not EmailData(i).Status.Sent Then
+            If EmailData(i).JobNum = "" Or EmailData(i).SendOrRec = "" Or EmailData(i).strFrom = "" Or EmailData(i).strTo = "" Then
+                strSQL1 = "SELECT * From emailqueue Where idGUID = '" & EmailData(i).GUID & "'"
+                ToLog "Clearing corrupt entry..." & "  GUID: " & EmailData(i).GUID
+                rs.Open strSQL1, cn_global, adOpenKeyset, adLockOptimistic
+                rs.Delete
+                rs.Update
+                rs.Close
+            End If
+        End If
+    Next i
+    ReDim EmailData(0)
+    Exit Sub
+errs:
+    ToLog "Error Fixing Queue!"
+    ToLog "ERROR DTL:  SUB = FixEmailQueue | " & Err.Number & " - " & Err.Description
 End Sub
 Public Sub ClearEmailQueue(Optional strGUID As String)
     On Error GoTo errs
@@ -292,14 +320,12 @@ Public Sub ClearEmailQueue(Optional strGUID As String)
     If strGUID = "" Then
         If bolVerbose Then ToLog "Clearing Queue..."
         For i = 0 To UBound(EmailData) - 1
-            If EmailData(i).Delivered Then
+            If EmailData(i).Status.Sent Or EmailData(i).Status.Trash Then
                 strSQL1 = "SELECT * From emailqueue Where idGUID = '" & EmailData(i).GUID & "'"
                 JPTRS.lblStatus.Caption = "Clearing Queue..."
                 rs.Open strSQL1, cn_global, adOpenKeyset, adLockOptimistic
-                With rs
-                    .Delete
-                    .Update
-                End With
+                rs.Delete
+                rs.Update
                 rs.Close
             End If
         Next i
@@ -313,7 +339,7 @@ Public Sub ClearEmailQueue(Optional strGUID As String)
             .Update
         End With
         rs.Close
-        RemoveFromArray strGUID
+        ReDim EmailData(0)
     End If
     Exit Sub
 errs:
@@ -441,6 +467,7 @@ Public Sub ErrHandle(lngErrNum As Long, strErrDescription As String, strOrigSub 
                 ToLog "Connected!"
             End If
         Case 94
+            ToLog lngErrNum & " - " & strErrDescription & " | " & strOrigSub
         Case Else
             ToLog "######### Unhandled error! ###########"
             ToLog lngErrNum & " - " & strErrDescription & " | " & strOrigSub
@@ -633,6 +660,7 @@ Function GetODBCDrivers() As Collection
     Next
 End Function
 Public Sub GetUserIndex()
+    On Error GoTo errs
     Dim rs      As New ADODB.Recordset
     Dim strSQL1 As String
     Dim i       As Integer
@@ -652,6 +680,9 @@ Public Sub GetUserIndex()
             rs.MoveNext
         End With
     Loop
+    Exit Sub
+errs:
+    ErrHandle Err.Number, Err.Description, "GetUserIndex"
 End Sub
 Public Function OKToRun() As Boolean
     Dim Flag As Boolean
@@ -715,22 +746,28 @@ Public Function DailyReportRecpts(GroupIndex As Integer) As String
 End Function
 Public Sub SendEmails()
     On Error GoTo errs
-    Dim i As Integer
+    Dim tmpEmailData As EmailInfo 'temp array for procedure calls, to prevent locking the EmailData array
+    Dim i            As Integer
+    Dim bolDelivered As Boolean
     For i = 0 To UBound(EmailData) - 1
         If bolVerbose Then ToLog "Sending SMTP " & i + 1 & " of " & UBound(EmailData) & " : " & EmailData(i).TimeStamp & " - " & EmailData(i).SendOrRec & " - " & EmailData(i).strFrom & " - " & EmailData(i).strTo & " - " & EmailData(i).JobNum & " - " & EmailData(i).Description & " - " & EmailData(i).PartNum & " - " & EmailData(i).Customer & " - " & EmailData(i).Creator & " - " & EmailData(i).CreateDate & " - " & EmailData(i).Comment
         JPTRS.lblStatus.Caption = "Sending EMail...."
         lngAttempts = lngAttempts + 1
-        SendNotification EmailData(i).SendOrRec, EmailData(i).strFrom, EmailData(i).strTo, EmailData(i).JobNum, EmailData(i).Description, EmailData(i).PartNum, EmailData(i).Customer, EmailData(i).Creator, EmailData(i).CreateDate, EmailData(i).Comment, EmailData(i).TimeStamp, EmailData(i).GUID
-        EmailData(i).Delivered = True
-        lngSuccess = lngSuccess + 1
-        JPTRS.lblStatus.Caption = "Waiting...."
-        ToLog "Waiting..."
+        tmpEmailData = EmailData(i)
+        Do
+            EmailData(i).Status = SendNotification(tmpEmailData.SendOrRec, tmpEmailData.strFrom, tmpEmailData.strTo, tmpEmailData.JobNum, tmpEmailData.Description, tmpEmailData.PartNum, tmpEmailData.Customer, tmpEmailData.Creator, tmpEmailData.CreateDate, tmpEmailData.Comment, tmpEmailData.TimeStamp, tmpEmailData.GUID)
+            If Not EmailData(i).Status.Sent And Not EmailData(i).Status.Trash Then Exit For
+        Loop Until EmailData(i).Status.Sent Or EmailData(i).Status.Trash
+        If EmailData(i).Status.Sent Then
+            ToLog "Email Sent!"
+            lngSuccess = lngSuccess + 1
+        End If
         Wait intWaitTime 'wait to avoid flooding server
     Next
     Exit Sub
 errs:
-    ToLog "Error Sending Emails!"
-    ToLog "ERROR DTL:  SUB = SendEmails | " & Err.Number & " - " & Err.Description
+    ToLog "***** Error Sending Emails! *****"
+    ToLog "***** ERROR DTL:  SUB = SendEmails | " & Err.Number & " - " & Err.Description
 End Sub
 Public Function SendNotification(SendRec As String, _
                                  MailFrom As String, _
@@ -744,11 +781,13 @@ Public Function SendNotification(SendRec As String, _
                                  strComment As String, _
                                  strTimeStamp As String, _
                                  strGUID As String, _
-                                 Optional bolRetry As Boolean) As Boolean
+                                 Optional bolRetry As Boolean) As NotificationReturnType
     On Error GoTo errs
     Dim iConf As New CDO.Configuration
     Dim Flds  As ADODB.Fields
     Dim iMsg  As New CDO.Message
+    SendNotification.Sent = False
+    SendNotification.Trash = False
     Set Flds = iConf.Fields
     ' Set the configuration
     Flds(cdoSendUsingMethod) = cdoSendUsingPort
@@ -774,37 +813,41 @@ Public Function SendNotification(SendRec As String, _
     Set iMsg = Nothing
     Set iConf = Nothing
     Set Flds = Nothing
-    SendNotification = True
+    SendNotification.Sent = True
+    SendNotification.Trash = True
     Exit Function
 errs:
-    ToLog "Failed to send EMail notification!"
-    If bolVerbose Then ToLog "ERROR DTL:  SUB = SendNotification | " & Err.Number & " - " & Err.Description
-    If Err.Number = -2147220980 Or Err.Number = -2147220979 And Not bolRetry Then
+    ToLog "***** Failed to send EMail notification! ******"
+    If bolVerbose Then ToLog "*****ERROR DTL:  SUB = SendNotification | " & Err.Number & " - " & Err.Description
+    If Err.Number = -2147220980 Or Err.Number = -2147220979 Then
         ToLog "Email address(s) not found. Waiting, Refreshing user index and trying again..."
-        ToLog "Waiting..."
-        Wait 5000 'intWaitTime
+        Wait 5000
         GetUserIndex
         ToLog "User Index Refreshed..."
         ToLog "Retrying... " & intRetryFail + 1 & " of " & intRetryFailMax
         intRetryFail = intRetryFail + 1
         If intRetryFail >= intRetryFailMax Then
             intRetryFail = 0
-            ToLog "That's enough of that. Clearing bad notification:"
+            ToLog "That's enough of that. Marking packet for deletion and moving on."
             ToLog SendRec & " - " & MailFrom & " - " & MailTo & " - " & JobNum & " - " & strDescrip & " - " & strPartNum & " - " & strCustomer & " - " & strCreator & " - " & strCreateDate & " - " & strComment & " - " & strTimeStamp
-            ClearEmailQueue strGUID
+            SendNotification.Sent = False
+            SendNotification.Trash = True
             Exit Function
         End If
-        SendNotification SendRec, MailFrom, MailTo, JobNum, strDescrip, strPartNum, strCustomer, strCreator, strCreateDate, strComment, strTimeStamp, strGUID, True
     End If
     If Err.Number = -2147220973 Then 'if failed to connect then clear successful deliveries and try again
-        ToLog "Could not establish connection. Clearing successful from queue and retrying..."
+        ToLog "***** Could not establish connection. Restarting... *****"
+        SendNotification.Sent = False
+        SendNotification.Trash = False
         lngRetries = lngRetries + 1
-        ClearEmailQueue
-        CheckQueue
+        Wait intWaitTime
+        Exit Function
     End If
     If Err.Number = -2147220974 Then 'if lost connection, the email still made it, so fail softly and continue
-        ToLog "Lost connection after send, probably... Moving on..."
+        ToLog "***** Lost connection after send, probably... Moving on... *****"
         lngSuccess = lngSuccess + 1
+        SendNotification.Sent = True
+        SendNotification.Trash = True
         Resume Next
     End If
 End Function
@@ -852,13 +895,13 @@ Public Sub SendReport(intReportType As Integer, MailFrom As String, MailTo As St
     Exit Sub
 errs:
     If intReportType = Weekly Then
-        ToLog "Failed to send Weekly Report!"
+        ToLog "***** Failed to send Weekly Report! *****"
     ElseIf intReportType = Daily Then
-        ToLog "Failed to send Daily Report!"
+        ToLog "***** Failed to send Daily Report! *****"
     End If
-    If bolVerbose Then ToLog "ERROR DTL:  SUB = SendReport | " & Err.Number & " - " & Err.Description
+    If bolVerbose Then ToLog "***** ERROR DTL:  SUB = SendReport | " & Err.Number & " - " & Err.Description
     ToLog "Waiting and retrying..."
-    ToLog "Waiting..."
+    'ToLog "Waiting..."
     Wait intWaitTime
     ToLog "Retrying..."
     SendReport intReportType, MailFrom, MailTo
@@ -896,12 +939,14 @@ End Sub
 Public Sub Wait(ByVal DurationMS As Long)
     Dim EndTime As Long
     EndTime = GetTickCount + DurationMS
+    ToLog "Waiting... " & DurationMS & "ms"
     Do While EndTime > GetTickCount
         DoEvents
         Sleep 1
     Loop
 End Sub
 Public Sub WeeklyReportGetData()
+    On Error GoTo errs
     Dim lngTIS  As Long
     Dim i       As Integer
     Dim rs      As New ADODB.Recordset
@@ -961,8 +1006,12 @@ Public Sub WeeklyReportGetData()
     End With
     ReportParseHTML Weekly
     SendReport Weekly, "JPTReportServer@worthingtonindustries.com", WeeklyReportRecpts
+    Exit Sub
+errs:
+    ErrHandle Err.Number, Err.Description, "WeeklyReportGetData"
 End Sub
 Public Sub RunDailyReport()
+    On Error GoTo errs
     Dim i As Integer
     ToLog "Starting Daily Report..."
     ToLog "Processing filter groups..."
@@ -974,12 +1023,16 @@ Public Sub RunDailyReport()
         DailyReportGetData ReportsGroups(i).Filters
         ToLog "Recipients: " & DailyReportRecpts(i)
         SendReport Daily, "JPTReportServer@worthingtonindustries.com", DailyReportRecpts(i)
-        ToLog "Waiting..."
+        'ToLog "Waiting..."
         Wait intWaitTime
     Next i
     ToLog "Daily report complete!"
+    Exit Sub
+errs:
+    ErrHandle Err.Number, Err.Description, "RunDailyReport"
 End Sub
 Public Sub DailyReportGetData(Filters As String)
+    On Error GoTo errs
     Dim lngTIS  As Long
     Dim i       As Integer
     Dim rs      As New ADODB.Recordset
@@ -1037,9 +1090,9 @@ Public Sub DailyReportGetData(Filters As String)
             .MoveNext
         Loop
     End With
-    'WeeklyReportParseCSV
     ReportParseHTML Daily, Filters
-    'WeeklyReportRecpts
+errs:
+    ErrHandle Err.Number, Err.Description, "DailyReportGetData"
 End Sub
 Public Sub WeeklyReportParseCSV()
     On Error GoTo errs

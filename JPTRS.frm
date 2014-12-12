@@ -425,7 +425,6 @@ Private Sub Form_Load()
     ToLog "Getting User List..."
     GetUserIndex
     ToLog "Ready!..."
-
 End Sub
 Private Sub Form_MouseMove(Button As Integer, Shift As Integer, X As Single, y As Single)
     Dim msg     As Long
@@ -474,7 +473,7 @@ Private Sub tmrCheckQueue_Timer()
     lblRequests.Caption = lngAttempts
     lblSuccess.Caption = lngSuccess
     lblRetries.Caption = lngRetries
-    DoEvents
+    'DoEvents
     Exit Sub
 errs:
     ErrHandle Err.Number, Err.Description, "CheckQueueTimer" 'ToLog Err.Number & " - " & Err.Description

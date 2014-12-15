@@ -1091,6 +1091,7 @@ Public Sub DailyReportGetData(Filters As String)
         Loop
     End With
     ReportParseHTML Daily, Filters
+    Exit Sub
 errs:
     ErrHandle Err.Number, Err.Description, "DailyReportGetData"
 End Sub

@@ -458,6 +458,7 @@ Public Sub Form_QueryUnload(Cancel As Integer, UnloadMode As Integer)
     Else
         Cancel = True
     End If
+    Exit Sub
 errs:
     ToLog Err.Number & " - " & Err.Description
     Resume Next

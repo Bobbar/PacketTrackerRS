@@ -493,7 +493,6 @@ Private Sub tmrTaskTimer_Timer()
     If CurrentInterval(MinsCounted, MinutesTillRefresh) Then
         tmrCheckQueue.Enabled = False
         tmrReportClock.Enabled = False
-        Wait 5
         GetUserIndex
         tmrCheckQueue.Enabled = True
         tmrReportClock.Enabled = True

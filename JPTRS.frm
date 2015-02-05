@@ -1,4 +1,5 @@
 VERSION 5.00
+Object = "{248DD890-BB45-11CF-9ABC-0080C7E7B78D}#1.0#0"; "MSWINSCK.OCX"
 Begin VB.Form JPTRS 
    AutoRedraw      =   -1  'True
    BorderStyle     =   1  'Fixed Single
@@ -23,6 +24,13 @@ Begin VB.Form JPTRS
    ScaleHeight     =   5235
    ScaleWidth      =   8370
    StartUpPosition =   1  'CenterOwner
+   Begin MSWinsockLib.Winsock TCPServer 
+      Left            =   7080
+      Top             =   120
+      _ExtentX        =   741
+      _ExtentY        =   741
+      _Version        =   393216
+   End
    Begin VB.Timer tmrTaskTimer 
       Interval        =   60000
       Left            =   7560
@@ -416,15 +424,17 @@ Private Sub Form_Load()
     bolVerbose = CBool(chkVerbose.Value)
     strLogLoc = App.Path  'Environ$("APPDATA") & "\JPTRS\LOG.LOG"
     strCSVLoc = Environ$("APPDATA") & "\JPTRS\"
-    ToLog "Initializing..."
+    Logger "Initializing..."
     FindMySQLDriver
-    ToLog "Starting Global ADO Connection..."
-    If bolVerbose Then ToLog "uid=" & strUsername & ";pwd=" & strPassword & ";server=" & strServerAddress & ";" & "driver={" & strSQLDriver & "};database=TicketDB;dsn=;"
-    If ConnectToDB Then ToLog "Connected!"
+    Logger "Starting Global ADO Connection..."
+    If bolVerbose Then Logger "uid=" & strUsername & ";pwd=" & strPassword & ";server=" & strServerAddress & ";" & "driver={" & strSQLDriver & "};database=TicketDB;dsn=;"
+    If ConnectToDB Then Logger "Connected!"
     'cn_global.Open "uid=" & strUsername & ";pwd=" & strPassword & ";server=" & strServerAddress & ";" & "driver={" & strSQLDriver & "};database=TicketDB;dsn=;"
-    ToLog "Getting User List..."
+    Logger "Getting User List..."
     GetUserIndex
-    ToLog "Ready!..."
+    Logger "Starting TCP Server..."
+    StartTCPServer
+    Logger "Ready!..."
 End Sub
 Private Sub Form_MouseMove(Button As Integer, Shift As Integer, X As Single, y As Single)
     Dim msg     As Long
@@ -448,36 +458,68 @@ Public Sub Form_QueryUnload(Cancel As Integer, UnloadMode As Integer)
     Dim blah
     ' blah = MsgBox("Are you sure you want to close the server!", vbOKCancel, "Are you sure?!")
     If blah = blah Then 'vbOK Then
-        ToLog "Closing Server Application..."
+        Logger "Closing Server Application..."
         cn_global.Close
-        ToLog "Global ADO Connection Closed..."
+        Logger "Global ADO Connection Closed..."
         'Unload Me
-        ToLog "Unloaded Form..."
-        ToLog "Goodbye..."
+        Logger "Unloaded Form..."
+        Logger "Goodbye..."
         End
     Else
         Cancel = True
     End If
     Exit Sub
 errs:
-    ToLog Err.Number & " - " & Err.Description
+    Logger Err.Number & " - " & Err.Description
     Resume Next
 End Sub
 Private Sub Form_Unload(Cancel As Integer)
     Shell_NotifyIcon NIM_DELETE, nid ' del tray icon
 End Sub
+
+Private Sub TCPServer_Close()
+Debug.Print "Closing..."
+
+End Sub
+
+Private Sub TCPServer_ConnectionRequest(ByVal requestID As Long)
+ If TCPServer.State <> sckClosed Then _
+    TCPServer.Close
+    ' Accept the request with the requestID
+    ' parameter.
+    TCPServer.Accept requestID
+    strSocketRequestID = requestID
+    
+    Logger "TCP Socket: Connection attempt from " & requestID
+    
+
+    Logger "TCP Socket: Requesting Auth"
+    
+    RequestPass
+    
+    
+End Sub
+
+Private Sub TCPServer_DataArrival(ByVal bytesTotal As Long)
+Dim strData As String
+    TCPServer.GetData strData
+    ParsePacket strData
+    
+    
+End Sub
+
 Private Sub tmrCheckQueue_Timer()
     On Error GoTo errs
     JPTRS.lblStatus.Caption = "Idle..."
     CheckQueue
-    JPTRS.Caption = strAPPTITLE + " - Up " & ConvertTime(DateTime.Now)
+    'JPTRS.Caption = strAPPTITLE + " - Up " & ConvertTime(DateTime.Now)
     lblRequests.Caption = lngAttempts
     lblSuccess.Caption = lngSuccess
     lblRetries.Caption = lngRetries
     'DoEvents
     Exit Sub
 errs:
-    ErrHandle Err.Number, Err.Description, "CheckQueueTimer" 'ToLog Err.Number & " - " & Err.Description
+    ErrHandle Err.Number, Err.Description, "CheckQueueTimer" 'Logger Err.Number & " - " & Err.Description
     Resume Next
 End Sub
 Private Sub tmrReportClock_Timer()
@@ -492,15 +534,12 @@ End Sub
 Private Sub tmrTaskTimer_Timer()
     MinsCounted = MinsCounted + 1
     If CurrentInterval(MinsCounted, MinutesTillRefresh) Then
-        tmrCheckQueue.Enabled = False
-        tmrReportClock.Enabled = False
-        GetUserIndex
-        tmrCheckQueue.Enabled = True
-        tmrReportClock.Enabled = True
+        RefreshUserList
     Else
     End If
     If CurrentInterval(MinsCounted, MinutesTillStatusReport) Then
-        ToLog "STATUS: Uptime: " & ConvertTime(DateTime.Now) & "    Atmpts, Sucss, Rtry: " & lngAttempts & ", " & lngSuccess & ", " & lngRetries
+        Logger "STATUS: Uptime: " & ConvertTime(DateTime.Now) & "    Atmpts, Sucss, Rtry: " & lngAttempts & ", " & lngSuccess & ", " & lngRetries
     End If
     If MinsCounted >= 1440 Then MinsCounted = 0 'day has passed, start over
 End Sub
+

@@ -8,11 +8,11 @@ Public Const colClosed        As Long = &H8080FF
 Public Const colFiled         As Long = &H8587FF '&HFF8080
 Public Const colReopened      As Long = &HFF80FF
 Public Const intWaitTime      As Integer = 10000
-Public Const strSMTPServer    As String = "" '"mx.wthg.com"
-Public Const strServerAddress As String = "localhost" '"ohbre-pwadmin01"
+Public Const strSMTPServer    As String = "mx.wthg.com"
+Public Const strServerAddress As String = "ohbre-pwadmin01"
 Public Const strUsername      As String = "TicketApp"
 Public Const strPassword      As String = "yb4w4"
-Public Const strListenPort As String = "1001"
+Public Const strListenPort    As String = "1001"
 Public strSQLDriver           As String
 Const HKEY_LOCAL_MACHINE = &H80000002
 Private Declare Function RegOpenKeyEx _
@@ -153,9 +153,8 @@ Private Type GroupAttribs
     Filters As String
     Userlist() As UserAttributes
 End Type
-Private ReportsGroups() As GroupAttribs
-
-
+Private ReportsGroups()   As GroupAttribs
+Public bolExecutionPaused As Boolean
 Public Sub RefreshUserList()
     With JPTRS
         .tmrCheckQueue.Enabled = False
@@ -364,20 +363,40 @@ Public Sub ClearEmailQueueAll()
     Dim rs      As New ADODB.Recordset
     Dim strSQL1 As String
     cn_global.CursorLocation = adUseClient
-    If bolVerbose Then Logger "Clearing Queue..."
-    For i = 0 To UBound(EmailData) - 1
-        strSQL1 = "SELECT * From emailqueue Where idGUID = '" & EmailData(i).GUID & "'"
-        JPTRS.lblStatus.Caption = "Clearing Queue..."
-        rs.Open strSQL1, cn_global, adOpenKeyset, adLockOptimistic
+    If bolVerbose Then Logger "Force Clearing Queue..."
+    'For i = 0 To UBound(EmailData) - 1
+    strSQL1 = "SELECT * From emailqueue"
+    JPTRS.lblStatus.Caption = "Clearing Queue..."
+    rs.Open strSQL1, cn_global, adOpenKeyset, adLockOptimistic
+    Do Until rs.EOF
         rs.Delete
-        rs.Update
-        rs.Close
-    Next i
+        rs.MoveNext
+    Loop
+    rs.Update
+    rs.Close
+    'Next i
     ReDim EmailData(0)
     Exit Sub
 errs:
     Logger "Error Clearing Queue!"
     Logger "ERROR DTL:  SUB = ClearEmailQueue | " & Err.Number & " - " & Err.Description
+End Sub
+Public Sub EndProgram()
+    On Error GoTo errs
+    Dim blah
+    Logger "Closing Server Application..."
+    Logger "Closing Connections..."
+    JPTRS.TCPServer.Close
+    Logger "TCP Socket Closed..."
+    cn_global.Close
+    Logger "Global ADO Connection Closed..."
+    Logger "Unloaded Form..."
+    Logger "Goodbye..."
+    End
+    Exit Sub
+errs:
+    Logger Err.Number & " - " & Err.Description
+    Resume Next
 End Sub
 Public Function RemoveFromArray(strGUID As String)
     Dim i          As Integer
@@ -971,13 +990,16 @@ Public Sub Logger(Message As String)
     If JPTRS.TCPServer.State = 7 Then
         SocketLog Message
     End If
-
 End Sub
 Public Sub Wait(ByVal DurationMS As Long)
     Dim EndTime As Long
     EndTime = GetTickCount + DurationMS
     Logger "Waiting... " & DurationMS & "ms"
     Do While EndTime > GetTickCount
+        DoEvents
+        Sleep 1
+    Loop
+    Do Until Not bolExecutionPaused
         DoEvents
         Sleep 1
     Loop

@@ -424,6 +424,7 @@ Private Sub Form_Load()
     bolVerbose = CBool(chkVerbose.Value)
     strLogLoc = App.Path  'Environ$("APPDATA") & "\JPTRS\LOG.LOG"
     strCSVLoc = Environ$("APPDATA") & "\JPTRS\"
+    bolExecutionPaused = False
     Logger "Initializing..."
     FindMySQLDriver
     Logger "Starting Global ADO Connection..."
@@ -454,60 +455,33 @@ Private Sub Form_MouseMove(Button As Integer, Shift As Integer, X As Single, y A
     End Select
 End Sub
 Public Sub Form_QueryUnload(Cancel As Integer, UnloadMode As Integer)
-    On Error GoTo errs
-    Dim blah
-    ' blah = MsgBox("Are you sure you want to close the server!", vbOKCancel, "Are you sure?!")
-    If blah = blah Then 'vbOK Then
-        Logger "Closing Server Application..."
-        cn_global.Close
-        Logger "Global ADO Connection Closed..."
-        'Unload Me
-        Logger "Unloaded Form..."
-        Logger "Goodbye..."
-        End
-    Else
-        Cancel = True
-    End If
-    Exit Sub
-errs:
-    Logger Err.Number & " - " & Err.Description
-    Resume Next
+    EndProgram
 End Sub
 Private Sub Form_Unload(Cancel As Integer)
     Shell_NotifyIcon NIM_DELETE, nid ' del tray icon
 End Sub
-
 Private Sub TCPServer_Close()
-Debug.Print "Closing..."
-
-End Sub
-
-Private Sub TCPServer_ConnectionRequest(ByVal requestID As Long)
- If TCPServer.State <> sckClosed Then _
+    Logger "TCP Socket: " & strSocketAcceptedID & " disconnecting..."
     TCPServer.Close
+    strSocketRequestID = ""
+    strSocketAcceptedID = ""
+    StartTCPServer
+End Sub
+Private Sub TCPServer_ConnectionRequest(ByVal requestID As Long)
+    If TCPServer.State <> sckClosed Then TCPServer.Close
     ' Accept the request with the requestID
     ' parameter.
     TCPServer.Accept requestID
     strSocketRequestID = requestID
-    
     Logger "TCP Socket: Connection attempt from " & requestID
-    
-
     Logger "TCP Socket: Requesting Auth"
-    
     RequestPass
-    
-    
 End Sub
-
 Private Sub TCPServer_DataArrival(ByVal bytesTotal As Long)
-Dim strData As String
+    Dim strData As String
     TCPServer.GetData strData
     ParsePacket strData
-    
-    
 End Sub
-
 Private Sub tmrCheckQueue_Timer()
     On Error GoTo errs
     JPTRS.lblStatus.Caption = "Idle..."
@@ -542,4 +516,3 @@ Private Sub tmrTaskTimer_Timer()
     End If
     If MinsCounted >= 1440 Then MinsCounted = 0 'day has passed, start over
 End Sub
-

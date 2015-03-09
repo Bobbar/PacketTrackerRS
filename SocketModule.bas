@@ -13,6 +13,7 @@ Public Const RequestPacket   As String = "REQ"
 Public Const TerminatePacket As String = "TERM"
 Public Const PasswordPacket  As String = "PWD"
 Public Const LogPacket       As String = "LOG"
+Public Const ResponsePacket  As String = "RESP"
 Public Const NamePacket      As String = "NAME"
 Public bolWaitingForPass     As Boolean
 Public Sub ParsePacket(Data As String)
@@ -46,16 +47,16 @@ Public Sub PacketCommand(Command As String)
     Command = UCase$(Command)
     Select Case Command
         Case "UPDATEUSERLIST"
-            Logger "Updating user list..."
+            SocketLog "Updating user list...", ResponsePacket
             RefreshUserList
         Case "CLEARQUEUE"
             ClearEmailQueueAll
         Case "UPTIME"
-            Logger ConvertTime(DateTime.Now)
+            SocketLog ConvertTime(DateTime.Now), ResponsePacket
         Case "STARTREPORT DAILY"
         Case "STARTREPORT WEEKLY"
         Case "PAUSE"
-            Logger "Pausing exeution..."
+            SocketLog "Pausing exeution...", ResponsePacket
             With JPTRS
                 .tmrCheckQueue.Enabled = False
                 .tmrReportClock.Enabled = False
@@ -63,7 +64,7 @@ Public Sub PacketCommand(Command As String)
                 bolExecutionPaused = True
             End With
         Case "RESUME"
-            Logger "Resuming exeution..."
+            SocketLog "Resuming exeution...", ResponsePacket
             With JPTRS
                 .tmrCheckQueue.Enabled = True
                 .tmrReportClock.Enabled = True
@@ -71,41 +72,42 @@ Public Sub PacketCommand(Command As String)
                 bolExecutionPaused = False
             End With
         Case "ENDPROGRAM"
-            Logger "Ending program..."
+            SocketLog "Ending program...", ResponsePacket
             Wait 1000
             EndProgram
         Case "STATUS"
-            Logger "STATUS: Uptime: " & ConvertTime(DateTime.Now) & "    Atmpts, Sucss, Rtry: " & lngAttempts & ", " & lngSuccess & ", " & lngRetries
+            SocketLog "STATUS: Uptime: " & ConvertTime(DateTime.Now) & "    Atmpts, Sucss, Rtry: " & lngAttempts & ", " & lngSuccess & ", " & lngRetries, ResponsePacket
         Case "PASSWORD"
             CheckPassword Command
         Case "LOADLOG"
             SendLog
+        Case "CLEARLOG"
+            ClearLog
         Case Else
-            Logger "'" & Command & "' is not a recognized command."
+            SocketLog "'" & Command & "' is not a recognized command.", ResponsePacket
     End Select
 End Sub
 Public Sub SendLog()
     Dim i As Integer
     With JPTRS
-        SocketLog "[LOG START]"
-        For i = .lstLog.ListCount - 1 To 0 Step -1
-            SocketLog .lstLog.List(i)
-        Next i
-        SocketLog "[LOG END]"
+        SocketLog "[LOG START]", ResponsePacket
+        SocketLog strLogBuffer, ResponsePacket
+        SocketLog "[LOG END]", ResponsePacket
     End With
 End Sub
 Public Sub CheckPassword(Password As String)
     On Error GoTo errs
+    Dim intReturns  As Integer
     Dim rs          As New ADODB.Recordset
     Dim strSQL1     As String
     Dim strPassword As String
-    strSQL1 = "SELECT * FROM socketvars"
+    strSQL1 = "SELECT * FROM socketvars WHERE idPassword = MD5('" & Password & "');"
     cn_global.CursorLocation = adUseClient
     rs.Open strSQL1, cn_global, adOpenKeyset
     With rs
-        strPassword = !idPassword
+        intReturns = .RecordCount
     End With
-    If Password = strPassword Then
+    If intReturns > 0 Then
         AcceptPassword
         Logger "TCP Socket: Password accepted!"
         strSocketAcceptedID = PacketData.ID
@@ -118,6 +120,14 @@ Public Sub CheckPassword(Password As String)
 errs:
     ErrHandle Err.Number, Err.Description, "CheckPassword"
 End Sub
+Public Sub CheckSocketStatus()
+    With JPTRS
+        If .TCPServer.State = 7 Then SendData strSocketRequestID & ",NULL,NULL" 'send blank packet to test connection.
+        If .TCPServer.State = 9 Then
+            Call JPTRS.TCPServer_Close
+        End If
+    End With
+End Sub
 Public Sub AcceptPassword()
     SendData strSocketRequestID & "," & PasswordPacket & ",GOODPASS"
     bolWaitingForPass = False
@@ -127,24 +137,24 @@ Public Sub RejectPassword()
     bolWaitingForPass = False
 End Sub
 Public Sub RequestPass()
-    SocketLog "Password?"
+    SocketLog "Password?", ResponsePacket
     SendData strSocketRequestID & "," & PasswordPacket & ",GIVEPASS"
     bolWaitingForPass = True
 End Sub
 Public Sub RequestName()
-    SocketLog "Computer name?"
+    SocketLog "Computer name?", ResponsePacket
     SendData strSocketRequestID & "," & RequestPacket & ",GIVENAME"
     bolWaitingForPass = True
 End Sub
 Public Sub SendData(Data As String)
     With JPTRS
         If .TCPServer.State <> sckClosed Then
-            .TCPServer.SendData Chr$(1) & Data
+            .TCPServer.SendData Chr$(1) & Data & Chr$(4)
         End If
     End With
 End Sub
-Public Sub SocketLog(strLog As String)
-    SendData strSocketRequestID & "," & LogPacket & "," & strLog
+Public Sub SocketLog(strLog As String, strType As String)
+    SendData strSocketRequestID & "," & strType & "," & strLog
 End Sub
 Public Sub StartTCPServer()
     On Error GoTo errs

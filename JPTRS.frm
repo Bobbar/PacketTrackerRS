@@ -1,10 +1,11 @@
 VERSION 5.00
 Object = "{248DD890-BB45-11CF-9ABC-0080C7E7B78D}#1.0#0"; "MSWINSCK.OCX"
+Object = "{3B7C8863-D78F-101B-B9B5-04021C009402}#1.2#0"; "RICHTX32.OCX"
 Begin VB.Form JPTRS 
    AutoRedraw      =   -1  'True
    BorderStyle     =   1  'Fixed Single
    Caption         =   "JPTRS"
-   ClientHeight    =   5235
+   ClientHeight    =   8220
    ClientLeft      =   45
    ClientTop       =   375
    ClientWidth     =   8370
@@ -21,9 +22,30 @@ Begin VB.Form JPTRS
    LinkTopic       =   "Form1"
    MaxButton       =   0   'False
    MinButton       =   0   'False
-   ScaleHeight     =   5235
+   ScaleHeight     =   8220
    ScaleWidth      =   8370
    StartUpPosition =   1  'CenterOwner
+   Begin VB.CommandButton Command1 
+      Caption         =   "Command1"
+      Height          =   360
+      Left            =   5880
+      TabIndex        =   24
+      Top             =   1680
+      Width           =   990
+   End
+   Begin RichTextLib.RichTextBox rtbLog 
+      Height          =   5595
+      Left            =   120
+      TabIndex        =   23
+      Top             =   2220
+      Width           =   8175
+      _ExtentX        =   14420
+      _ExtentY        =   9869
+      _Version        =   393217
+      Enabled         =   -1  'True
+      ScrollBars      =   3
+      TextRTF         =   $"JPTRS.frx":08CA
+   End
    Begin MSWinsockLib.Winsock TCPServer 
       Left            =   7080
       Top             =   120
@@ -45,25 +67,18 @@ Begin VB.Form JPTRS
       Caption         =   "Minimize To Tray"
       Height          =   480
       Left            =   7020
-      TabIndex        =   4
+      TabIndex        =   3
       Top             =   1620
       Width           =   990
    End
    Begin VB.CheckBox chkVerbose 
       Caption         =   "Verbose"
       Height          =   255
-      Left            =   180
-      TabIndex        =   1
-      Top             =   4920
+      Left            =   240
+      TabIndex        =   0
+      Top             =   7860
       Value           =   1  'Checked
       Width           =   1335
-   End
-   Begin VB.ListBox lstLog 
-      Height          =   2595
-      Left            =   180
-      TabIndex        =   0
-      Top             =   2220
-      Width           =   7995
    End
    Begin VB.Timer tmrCheckQueue 
       Interval        =   2000
@@ -76,7 +91,7 @@ Begin VB.Form JPTRS
       Caption         =   "%RETRIES%"
       Height          =   195
       Left            =   1920
-      TabIndex        =   23
+      TabIndex        =   22
       Top             =   1560
       Width           =   960
    End
@@ -86,7 +101,7 @@ Begin VB.Form JPTRS
       Caption         =   "%SUCCESS%"
       Height          =   195
       Left            =   1920
-      TabIndex        =   22
+      TabIndex        =   21
       Top             =   1320
       Width           =   1005
    End
@@ -96,7 +111,7 @@ Begin VB.Form JPTRS
       Caption         =   "%REQUESTS%"
       Height          =   195
       Left            =   1920
-      TabIndex        =   21
+      TabIndex        =   20
       Top             =   1080
       Width           =   1110
    End
@@ -116,7 +131,7 @@ Begin VB.Form JPTRS
       EndProperty
       Height          =   195
       Left            =   1200
-      TabIndex        =   20
+      TabIndex        =   19
       Top             =   1560
       Width           =   660
    End
@@ -136,7 +151,7 @@ Begin VB.Form JPTRS
       EndProperty
       Height          =   195
       Left            =   900
-      TabIndex        =   19
+      TabIndex        =   18
       Top             =   1320
       Width           =   930
    End
@@ -156,7 +171,7 @@ Begin VB.Form JPTRS
       EndProperty
       Height          =   195
       Left            =   1020
-      TabIndex        =   18
+      TabIndex        =   17
       Top             =   1080
       Width           =   885
    End
@@ -166,7 +181,7 @@ Begin VB.Form JPTRS
       Caption         =   "%SMTP Addy%"
       Height          =   195
       Left            =   1680
-      TabIndex        =   17
+      TabIndex        =   16
       Top             =   600
       Width           =   1140
    End
@@ -185,7 +200,7 @@ Begin VB.Form JPTRS
       EndProperty
       Height          =   195
       Left            =   300
-      TabIndex        =   16
+      TabIndex        =   15
       Top             =   600
       Width           =   1245
    End
@@ -195,7 +210,7 @@ Begin VB.Form JPTRS
       Caption         =   "%SERVER IP%"
       Height          =   195
       Left            =   1680
-      TabIndex        =   15
+      TabIndex        =   14
       Top             =   360
       Width           =   1095
    End
@@ -214,7 +229,7 @@ Begin VB.Form JPTRS
       EndProperty
       Height          =   195
       Left            =   720
-      TabIndex        =   14
+      TabIndex        =   13
       Top             =   360
       Width           =   840
    End
@@ -224,7 +239,7 @@ Begin VB.Form JPTRS
       Caption         =   "%CUR DAY%"
       Height          =   195
       Left            =   6240
-      TabIndex        =   13
+      TabIndex        =   12
       Top             =   960
       Width           =   990
    End
@@ -243,7 +258,7 @@ Begin VB.Form JPTRS
       EndProperty
       Height          =   195
       Left            =   5040
-      TabIndex        =   12
+      TabIndex        =   11
       Top             =   960
       Width           =   1065
    End
@@ -253,7 +268,7 @@ Begin VB.Form JPTRS
       Caption         =   "%RPT DAY%"
       Height          =   195
       Left            =   6240
-      TabIndex        =   11
+      TabIndex        =   10
       Top             =   720
       Width           =   960
    End
@@ -272,7 +287,7 @@ Begin VB.Form JPTRS
       EndProperty
       Height          =   195
       Left            =   5100
-      TabIndex        =   10
+      TabIndex        =   9
       Top             =   720
       Width           =   1065
    End
@@ -282,7 +297,7 @@ Begin VB.Form JPTRS
       Caption         =   "%FLAG%"
       Height          =   195
       Left            =   6180
-      TabIndex        =   9
+      TabIndex        =   8
       Top             =   480
       Width           =   705
    End
@@ -301,7 +316,7 @@ Begin VB.Form JPTRS
       EndProperty
       Height          =   195
       Left            =   5040
-      TabIndex        =   8
+      TabIndex        =   7
       Top             =   480
       Width           =   1065
    End
@@ -312,7 +327,7 @@ Begin VB.Form JPTRS
       Caption         =   "Time"
       Height          =   195
       Left            =   3840
-      TabIndex        =   7
+      TabIndex        =   6
       Top             =   1860
       Width           =   330
    End
@@ -331,9 +346,9 @@ Begin VB.Form JPTRS
       EndProperty
       ForeColor       =   &H00808080&
       Height          =   165
-      Left            =   6660
-      TabIndex        =   6
-      Top             =   5040
+      Left            =   6720
+      TabIndex        =   5
+      Top             =   7980
       Width           =   1515
    End
    Begin VB.Label lblAPPVERSION 
@@ -352,9 +367,9 @@ Begin VB.Form JPTRS
       EndProperty
       ForeColor       =   &H00808080&
       Height          =   165
-      Left            =   3420
-      TabIndex        =   5
-      Top             =   5040
+      Left            =   3480
+      TabIndex        =   4
+      Top             =   7980
       Width           =   1290
    End
    Begin VB.Label lblStatusLBL 
@@ -362,7 +377,7 @@ Begin VB.Form JPTRS
       Caption         =   "Status:"
       Height          =   195
       Left            =   3480
-      TabIndex        =   3
+      TabIndex        =   2
       Top             =   1560
       Width           =   525
    End
@@ -371,14 +386,14 @@ Begin VB.Form JPTRS
       Caption         =   "_________"
       Height          =   195
       Left            =   4080
-      TabIndex        =   2
+      TabIndex        =   1
       Top             =   1560
       Width           =   1410
    End
    Begin VB.Image Image1 
       Height          =   1335
       Left            =   3360
-      Picture         =   "JPTRS.frx":08CA
+      Picture         =   "JPTRS.frx":0945
       Top             =   120
       Width           =   1350
    End
@@ -411,6 +426,9 @@ End Sub
 Private Sub cmdSendToTray_Click()
     minimize_to_tray
 End Sub
+Private Sub Command1_Click()
+    Debug.Print strLogBuffer
+End Sub
 Private Sub Form_Initialize()
     dtRunDate = DateTime.Now
 End Sub
@@ -422,7 +440,7 @@ Private Sub Form_Load()
     lblSMTPAddy.Caption = strSMTPServer
     lblAPPVERSION.Caption = App.Major & "." & App.Minor & "." & App.Revision
     bolVerbose = CBool(chkVerbose.Value)
-    strLogLoc = App.Path  'Environ$("APPDATA") & "\JPTRS\LOG.LOG"
+    strLogLoc = App.Path
     strCSVLoc = Environ$("APPDATA") & "\JPTRS\"
     bolExecutionPaused = False
     Logger "Initializing..."
@@ -430,7 +448,6 @@ Private Sub Form_Load()
     Logger "Starting Global ADO Connection..."
     If bolVerbose Then Logger "uid=" & strUsername & ";pwd=" & strPassword & ";server=" & strServerAddress & ";" & "driver={" & strSQLDriver & "};database=TicketDB;dsn=;"
     If ConnectToDB Then Logger "Connected!"
-    'cn_global.Open "uid=" & strUsername & ";pwd=" & strPassword & ";server=" & strServerAddress & ";" & "driver={" & strSQLDriver & "};database=TicketDB;dsn=;"
     Logger "Getting User List..."
     GetUserIndex
     Logger "Starting TCP Server..."
@@ -460,7 +477,7 @@ End Sub
 Private Sub Form_Unload(Cancel As Integer)
     Shell_NotifyIcon NIM_DELETE, nid ' del tray icon
 End Sub
-Private Sub TCPServer_Close()
+Public Sub TCPServer_Close()
     Logger "TCP Socket: " & strSocketAcceptedID & " disconnecting..."
     TCPServer.Close
     strSocketRequestID = ""
@@ -497,6 +514,7 @@ errs:
     Resume Next
 End Sub
 Private Sub tmrReportClock_Timer()
+    CheckSocketStatus
     lblTime = Now
     If OKToRun Then WeeklyReportGetData
     If TimeForDaily Then

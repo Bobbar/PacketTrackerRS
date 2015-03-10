@@ -42,7 +42,6 @@ Begin VB.Form JPTRS
       _ExtentX        =   14420
       _ExtentY        =   9869
       _Version        =   393217
-      Enabled         =   -1  'True
       ScrollBars      =   3
       TextRTF         =   $"JPTRS.frx":08CA
    End
@@ -450,6 +449,8 @@ Private Sub Form_Load()
     If ConnectToDB Then Logger "Connected!"
     Logger "Getting User List..."
     GetUserIndex
+    Logger "Getting Report List..."
+    GetReports
     Logger "Starting TCP Server..."
     StartTCPServer
     Logger "Ready!..."
@@ -514,12 +515,14 @@ errs:
     Resume Next
 End Sub
 Private Sub tmrReportClock_Timer()
+    GetReports
     CheckSocketStatus
-    lblTime = Now
-    If OKToRun Then WeeklyReportGetData
-    If TimeForDaily Then
-        RunDailyReport
-    End If
+'    lblTime = Now
+'    If OKToRun Then WeeklyReportGetData
+'    If TimeForDaily Then
+'        RunDailyReport
+'    End If
+RunReports
     lblRptDay.Caption = strDayOfWeek(DayToRun)
     lblCurDay.Caption = strDayOfWeek(Weekday(Now))
 End Sub

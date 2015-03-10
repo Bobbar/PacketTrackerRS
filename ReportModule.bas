@@ -57,27 +57,39 @@ Private Type ReportAttributes
     Name As String
     ID As Integer
     RunDay As Integer
-    RunTime As String
+    RunTime As Integer 'String
     StartDate As Date
     EndDate As Date
     CompanyFilter As String
     HasRun As Boolean
 End Type
 Public Reports() As ReportAttributes
-Private Type UserAttributes
-    UserName As String
-    FullName As String
-    EMail As String
-    GetsDaily As Boolean
-    GetsWeekly As Boolean
-    Filters As String
+Private Type ReportGroupAttributes
+    GroupID As Integer
+    ReportID As Integer
+    EntryID As Integer
 End Type
-Private Users() As UserAttributes
-Private Type GroupAttribs
-    Filters As String
-    Userlist() As UserAttributes
-End Type
-Private ReportsGroups() As GroupAttribs
+Private ReportGroups() As ReportGroupAttributes
+Private Function GetReportRecipients(ReportID As Integer) As String
+    On Error GoTo errs
+    Dim rs            As New ADODB.Recordset
+    Dim strSQL1       As String
+    Dim i             As Integer
+    Dim tmpRecipients As String
+    strSQL1 = "SELECT users_0.idFullName, users_0.idEmail, users_0.idGroupID, reportsgroups_0.idGroupID, reportsgroups_0.idReportID, reportsgroups_0.idEntryID, reports_0.idReportName" & " FROM ticketdb.reports reports_0, ticketdb.reportsgroups reportsgroups_0, ticketdb.users users_0" & " WHERE users_0.idGroupID = reportsgroups_0.idGroupID AND reports_0.idReportID = reportsgroups_0.idReportID AND ((reportsgroups_0.idReportID='" & ReportID & "'))"
+    cn_global.CursorLocation = adUseClient
+    rs.Open strSQL1, cn_global, adOpenKeyset
+    Do Until rs.EOF
+        With rs
+            tmpRecipients = tmpRecipients + !idEmail & ";"
+            .MoveNext
+        End With
+    Loop
+    GetReportRecipients = tmpRecipients
+    Exit Function
+errs:
+    ErrHandle Err.Number, Err.Description, "GetReportRecipients"
+End Function
 Public Sub GetReports()
     On Error GoTo errs
     Dim rs      As New ADODB.Recordset
@@ -90,20 +102,20 @@ Public Sub GetReports()
     ReDim Reports(rs.RecordCount)
     Do Until rs.EOF
         With rs
-            Reports(.AbsolutePosition).Name = UCase$(!idReportName)
+            Reports(.AbsolutePosition).Name = !idReportName
             Reports(.AbsolutePosition).ID = !idReportID
             Reports(.AbsolutePosition).RunDay = !idRunDay
-            Reports(.AbsolutePosition).RunTime = !idRunTime
+            Reports(.AbsolutePosition).RunTime = CInt(!idRunTime)
             Reports(.AbsolutePosition).StartDate = ParseDate(!idStartDate)
             Reports(.AbsolutePosition).EndDate = ParseDate(!idEndDate)
             Reports(.AbsolutePosition).CompanyFilter = !idCompanyFilter
-            Reports(.AbsolutePosition).HasRun = CBool(!idHadRun)
+            Reports(.AbsolutePosition).HasRun = CBool(!idHasRun)
             rs.MoveNext
         End With
     Loop
     Exit Sub
 errs:
-    ErrHandle Err.Number, Err.Description, "GetUserIndex"
+    ErrHandle Err.Number, Err.Description, "GetReports"
 End Sub
 Private Function ParseDate(DateCode As String) As Date
     Dim strVar    As String
@@ -112,7 +124,7 @@ Private Function ParseDate(DateCode As String) As Date
     Dim tmpDate   As Date
     ParseDate = DateTime.Date
     SplitCode = Split(DateCode, "|")
-    If UBound(SplitCode) > 1 Then
+    If UBound(SplitCode) > 0 Then
         strVar = SplitCode(0)
         Modifier = SplitCode(1)
         Select Case strVar
@@ -121,7 +133,7 @@ Private Function ParseDate(DateCode As String) As Date
         End Select
     ElseIf UBound(SplitCode) = 1 Then
         strVar = SplitCode(0)
-        tmpDate = DateTime.DateTime
+        tmpDate = DateTime.Date
     End If
     ParseDate = tmpDate
 End Function
@@ -132,7 +144,17 @@ Public Sub RunReports()
             If Hour(Now) = Reports(i).RunTime And Reports(i).HasRun Then
                 'do nothing
             ElseIf Hour(Now) <> Reports(i).RunTime And Reports(i).HasRun Then
-            
+                UpdateReportHasRun Reports(i), False
+                GetReports
+            ElseIf Hour(Now) <> Reports(i).RunTime And Not Reports(i).HasRun Then
+                'do nothing
+            ElseIf Hour(Now) = Reports(i).RunTime And Not Reports(i).HasRun Then
+                StartReport Reports(i)
+            End If
+        ElseIf Reports(i).RunDay = 8 And IsWeekday Then '8 = every weekday
+            If Hour(Now) = Reports(i).RunTime And Reports(i).HasRun Then
+                'do nothing
+            ElseIf Hour(Now) <> Reports(i).RunTime And Reports(i).HasRun Then
                 UpdateReportHasRun Reports(i), False
                 GetReports
             ElseIf Hour(Now) <> Reports(i).RunTime And Not Reports(i).HasRun Then
@@ -143,26 +165,28 @@ Public Sub RunReports()
         End If
     Next i
 End Sub
-Public Sub UpdateReportHasRun(report As ReportAttributes, HasRun As Boolean)
+Public Sub UpdateReportHasRun(Report As ReportAttributes, HasRun As Boolean)
     On Error GoTo errs
     Dim i       As Integer
     Dim rs      As New ADODB.Recordset
     Dim strSQL1 As String
     cn_global.CursorLocation = adUseClient
-    strSQL1 = "SELECT * From reports Where idReportName = '" & report.Name & "' AND idReportID = '" & report.ID & "'"
+    strSQL1 = "SELECT * From reports Where idReportName = '" & Report.Name & "' AND idReportID = '" & Report.ID & "'"
     With rs
         .Open strSQL1, cn_global, adOpenKeyset, adLockOptimistic
         !idHasRun = CInt(Int(HasRun))
         .Update
     End With
+    Exit Sub
+errs:
+    ErrHandle Err.Number, Err.Description, "UpdateReportHasRun"
 End Sub
-Public Sub StartReport(report As ReportAttributes)
-Logger "Starting Report: " & report.Name & "..."
-GetReportData report
-
-
+Public Sub StartReport(Report As ReportAttributes)
+    Logger "Starting Report: " & Report.Name & "..."
+    GetReportData Report
+    Logger "Report Complete..."
 End Sub
-Public Sub GetReportData(report As ReportAttributes)
+Public Sub GetReportData(Report As ReportAttributes)
     On Error GoTo errs
     Dim lngTIS  As Long
     Dim i       As Integer
@@ -171,15 +195,15 @@ Public Sub GetReportData(report As ReportAttributes)
     i = 0
     cn_global.CursorLocation = adUseClient
     strSQL1 = "SELECT * FROM packetlist d LEFT JOIN packetentrydb c ON c.idJobNum = d.idJobNum WHERE idDate = (SELECT MAX(idDate) FROM packetentrydb c2 Where c2.idJobNum = d.idJobNum) AND idStatus='OPEN' ORDER BY idDate DESC LIMIT 50"
-    dtStartDate = report.StartDate 'dateTime.Date
-    dtEndDate = report.StartDate 'DateTime.Date
-    Logger "Getting Report Data..." & vbCrLf & "Filters = " & FilterString(report.CompanyFilter) & vbCrLf & "StartDate: " & dtStartDate & vbCrLf & "EndDate: " & dtEndDate
+    dtStartDate = Report.StartDate 'dateTime.Date
+    dtEndDate = Report.EndDate 'DateTime.Date
+    Logger "Getting Report Data..." & vbCrLf & "Filters = " & FilterString(Report.CompanyFilter) & vbCrLf & "StartDate: " & dtStartDate & vbCrLf & "EndDate: " & dtEndDate
     Set rs = cn_global.Execute(strSQL1)
     If rs.RecordCount < 1 Then Exit Sub
     ReDim ReportData(0)
     With rs
         Do Until .EOF
-            If Format(!idDate, strUserDateFormat) >= dtStartDate And Format(!idDate, strUserDateFormat) <= dtEndDate And IsUnFiltered(Filters, !idPlant) Then
+            If Format(!idDate, strUserDateFormat) >= dtStartDate And Format(!idDate, strUserDateFormat) <= dtEndDate And IsUnFiltered(Report.CompanyFilter, !idPlant) Then
                 If !idAction = "CREATED" Then
                     ReportData(i).Color = colCreate
                 ElseIf !idAction = "INTRANSIT" Then
@@ -221,67 +245,64 @@ Public Sub GetReportData(report As ReportAttributes)
             .MoveNext
         Loop
     End With
-    ParseReportHTML report
+    ParseReportHTML Report
     Exit Sub
 errs:
     ErrHandle Err.Number, Err.Description, "DailyReportGetData"
 End Sub
-Public Sub ParseReportHTML(report As ReportAttributes)  '0 = Weekly 1 = Daily
+Public Sub ParseReportHTML(Report As ReportAttributes)  '0 = Weekly 1 = Daily
     On Error GoTo errs
-    Logger "Parsing report to HTML..."
+    Logger "Parsing Report to HTML..."
     Dim tmpHTML As String
     Dim i       As Integer
     tmpHTML = tmpHTML + "<FONT STYLE=font-family:Tahoma;>" & vbCrLf
-    tmpHTML = tmpHTML + "<FONT SIZE=4><U>Job Packet Report: " & report.Name & "</U></FONT><BR>" & vbCrLf
-    tmpHTML = tmpHTML + "<FONT SIZE=2> Filters:  " & FilterString(report.CompanyFilter) & "</FONT><BR>" & vbCrLf
-End If
-tmpHTML = tmpHTML + "<FONT SIZE=2> Run Date: " & Now & "</FONT><BR>" & vbCrLf
-If intReportType = Weekly Then
-    tmpHTML = tmpHTML + "<FONT SIZE=2> Report Date: " & report.StartDate & " to " & report.EndDate & "</FONT><BR>" & vbCrLf
-End If
-tmpHTML = tmpHTML + "<BR>" & vbCrLf
-tmpHTML = tmpHTML + "<table border=1 cellpadding=2>" & vbCrLf
-tmpHTML = tmpHTML + "<tr>" & vbCrLf
-tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Job Num</th>" & vbCrLf
-tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Action</th>" & vbCrLf
-tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Action Date</th>" & vbCrLf
-tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Time In State</th>" & vbCrLf
-tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Description</th>" & vbCrLf
-tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Customer</th>" & vbCrLf
-tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Create Date</th>" & vbCrLf
-tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Creator</th>" & vbCrLf
-tmpHTML = tmpHTML + "</tr>"
-For i = 0 To UBound(ReportData) - 1
-    tmpHTML = tmpHTML + "<tr>" & vbCrLf
-    tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & "><B>" & ReportData(i).JobNum & "</B></td>" & vbCrLf
-    tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & "> <font size=2>" & ReportData(i).Action & "</font></td>" & vbCrLf
-    tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & "><font size=2>" & ReportData(i).ActionDate & "</font></td>" & vbCrLf
-    tmpHTML = tmpHTML + "<td align=center bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).TimeInState & "</td>" & vbCrLf
-    tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & "><font size=2>" & ReportData(i).Description & "</font></td>" & vbCrLf
-    tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).Customer & "</td>" & vbCrLf
-    tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & "><font size=2>" & ReportData(i).CreateDate & "</font></td>" & vbCrLf
-    tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & GetFullName(ReportData(i).Creator) & "</td>" & vbCrLf
-    tmpHTML = tmpHTML + "</tr>"
-Next
-tmpHTML = tmpHTML + "</table>"
-strReportHTML = tmpHTML
-SendReport
-Exit Sub
-errs:
-Logger "Failed while parsing Report HTML!  ReportName: " & report.Name
-If bolVerbose Then Logger "ERROR DTL:  SUB =  ReportParseHTML | " & Err.Number & " - " & Err.Description
-End Sub
-Public Sub SendReport(report As ReportAttributes, MailFrom As String, MailTo As String)
+    tmpHTML = tmpHTML + "<FONT SIZE=4><U>Job Packet Report: " & Report.Name & "</U></FONT><BR>" & vbCrLf
+    tmpHTML = tmpHTML + "<FONT SIZE=2> Filters:  " & FilterString(Report.CompanyFilter) & "</FONT><BR>" & vbCrLf
+    tmpHTML = tmpHTML + "<FONT SIZE=2> Run Date: " & Now & "</FONT><BR>" & vbCrLf
     If intReportType = Weekly Then
-        Logger "Sending Weekly Report...  (" & dtStartDate & " to " & dtEndDate & ")"
-    ElseIf intReportType = Daily Then
-        Logger "Sending Daily Report... "
+        tmpHTML = tmpHTML + "<FONT SIZE=2> Report Date: " & Report.StartDate & " to " & Report.EndDate & "</FONT><BR>" & vbCrLf
     End If
+    tmpHTML = tmpHTML + "<BR>" & vbCrLf
+    tmpHTML = tmpHTML + "<table border=1 cellpadding=2>" & vbCrLf
+    tmpHTML = tmpHTML + "<tr>" & vbCrLf
+    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Job Num</th>" & vbCrLf
+    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Action</th>" & vbCrLf
+    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Action Date</th>" & vbCrLf
+    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Time In State</th>" & vbCrLf
+    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Description</th>" & vbCrLf
+    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Customer</th>" & vbCrLf
+    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Create Date</th>" & vbCrLf
+    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Creator</th>" & vbCrLf
+    tmpHTML = tmpHTML + "</tr>"
+    For i = 0 To UBound(ReportData) - 1
+        tmpHTML = tmpHTML + "<tr>" & vbCrLf
+        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & "><B>" & ReportData(i).JobNum & "</B></td>" & vbCrLf
+        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & "> <font size=2>" & ReportData(i).Action & "</font></td>" & vbCrLf
+        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & "><font size=2>" & ReportData(i).ActionDate & "</font></td>" & vbCrLf
+        tmpHTML = tmpHTML + "<td align=center bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).TimeInState & "</td>" & vbCrLf
+        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & "><font size=2>" & ReportData(i).Description & "</font></td>" & vbCrLf
+        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).Customer & "</td>" & vbCrLf
+        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & "><font size=2>" & ReportData(i).CreateDate & "</font></td>" & vbCrLf
+        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & GetFullName(ReportData(i).Creator) & "</td>" & vbCrLf
+        tmpHTML = tmpHTML + "</tr>"
+    Next
+    tmpHTML = tmpHTML + "</table>"
+    strReportHTML = tmpHTML
+    SendReport Report
+    Exit Sub
+errs:
+    Logger "Failed while parsing Report HTML!  ReportName: " & Report.Name
+    If bolVerbose Then Logger "ERROR DTL:  SUB =  ReportParseHTML | " & Err.Number & " - " & Err.Description
+End Sub
+Public Sub SendReport(Report As ReportAttributes)
     On Error GoTo errs
     Dim iConf As New CDO.Configuration
     Dim Flds  As ADODB.Fields
     Dim iMsg  As New CDO.Message
     Set Flds = iConf.Fields
+    Dim MailTo As String
+    MailTo = GetReportRecipients(Report.ID)
+    Logger "Sending Report...  (" & Report.Name & " to " & MailTo & ")"
     ' Set the configuration
     Flds(cdoSendUsingMethod) = cdoSendUsingPort
     Flds(cdoSMTPServer) = strSMTPServer
@@ -292,12 +313,9 @@ Public Sub SendReport(report As ReportAttributes, MailFrom As String, MailTo As 
         Set .Configuration = iConf
         .Sender = MailFrom 'GetEmail(MailFrom)
         .To = MailTo 'GetEmail(MailTo)
-        .From = MailFrom 'GetEmail(MailFrom)
-        If intReportType = Weekly Then
-            .Subject = "JPT: Weekly Report (" & dtStartDate & " to " & dtEndDate & ")"
-        ElseIf intReportType = Daily Then
-            .Subject = "JPT: Daily Report (" & dtEndDate & ")"
-        End If
+        .From = "JPTReportServer@worthingtonindustries.com" 'MailFrom 'GetEmail(MailFrom)
+        .Subject = "JPT Report: " & Report.Name
+        '.Subject = "JPT: Daily Report (" & dtEndDate & ")"
         .HTMLBody = strReportHTML
         '.TextBody = Message
         .Send
@@ -306,25 +324,19 @@ Public Sub SendReport(report As ReportAttributes, MailFrom As String, MailTo As 
     Set iConf = Nothing
     Set Flds = Nothing
     'Set registry flag telling me that the report for this week has been sent
-    If intReportType = Weekly Then
-        SaveSetting App.EXEName, "WeeklyReportSent", "Sent", "TRUE"
-    ElseIf intReportType = Daily Then
-        SaveSetting App.EXEName, "DailyReportSent", "Sent", "TRUE"
-    End If
+    UpdateReportHasRun Report, True
     Logger "Report Sent..."
+    strReportHTML = ""
+    Wait intWaitTime
     Exit Sub
 errs:
-    If intReportType = Weekly Then
-        Logger "***** Failed to send Weekly Report! *****"
-    ElseIf intReportType = Daily Then
-        Logger "***** Failed to send Daily Report! *****"
-    End If
+    Logger "***** Failed to send Report! ReportID: " & Report.ID & " *****"
     If bolVerbose Then Logger "***** ERROR DTL:  SUB = SendReport | " & Err.Number & " - " & Err.Description
     Logger "Waiting and retrying..."
     'Logger "Waiting..."
     Wait intWaitTime
     Logger "Retrying..."
-    SendReport intReportType, MailFrom, MailTo
+    SendReport Report
 End Sub
 Public Function IsDay(intDay As Integer) As Boolean
     IsDay = False
@@ -360,62 +372,6 @@ Public Function IsUnFiltered(Filters As String, _
     If FilterArray(3) = 1 And Plant = RockyMtn Then IsUnFiltered = True
     If FilterArray(4) = 1 And Plant = SteelFab Then IsUnFiltered = True
     If FilterArray(5) = 1 And Plant = Wooster Then IsUnFiltered = True
-End Function
-Public Sub GetReportGroups() 'create a list of report groups with list a users included
-    Dim a As Integer, b As Integer
-    ReDim ReportsGroups(0) As GroupAttribs
-    For a = 1 To UBound(Users)
-        If Users(a).GetsDaily Then
-            If UBound(ReportsGroups) < 1 Then
-                NewGroup ReportsGroups, Users, a
-            Else
-                If Not InGroupIndex(ReportsGroups, Users(a).Filters) Then
-                    NewGroup ReportsGroups, Users, a
-                ElseIf InGroupIndex(ReportsGroups, Users(a).Filters) Then
-                    AddToGroup ReportsGroups, Users, GroupIndex(ReportsGroups, Users(a).Filters), a
-                End If
-            End If
-        End If
-    Next a
-End Sub
-Private Sub NewGroup(GroupIndex() As GroupAttribs, _
-                     UserIndex() As UserAttributes, _
-                     Index As Integer) 'create a new report group add user to it
-    ReDim Preserve ReportsGroups(UBound(ReportsGroups) + 1)
-    ReportsGroups(UBound(ReportsGroups)).Filters = UserIndex(Index).Filters
-    ReDim ReportsGroups(UBound(ReportsGroups)).Userlist(0)
-    ReportsGroups(UBound(ReportsGroups)).Userlist(0) = UserIndex(Index)
-End Sub
-Private Sub AddToGroup(GroupIndex() As GroupAttribs, _
-                       UserIndex() As UserAttributes, _
-                       Index As Integer, _
-                       UIndex As Integer) 'add user to existing group
-    With GroupIndex(Index)
-        ReDim Preserve .Userlist(UBound(.Userlist) + 1)
-        .Userlist(UBound(.Userlist)) = UserIndex(UIndex)
-    End With
-End Sub
-Private Function InGroupIndex(GroupArray() As GroupAttribs, _
-                              Filters As String) As Boolean 'is there already a group for this filter?
-    Dim i As Long
-    InGroupIndex = False
-    For i = 0 To UBound(GroupArray)
-        If Filters = GroupArray(i).Filters Then
-            InGroupIndex = True
-            Exit For
-        End If
-    Next i
-End Function
-Private Function GroupIndex(GroupArray() As GroupAttribs, _
-                            Filters As String) As Integer 'where is the existing filter?
-    Dim i As Long
-    GroupIndex = 0
-    For i = 0 To UBound(GroupArray)
-        If Filters = GroupArray(i).Filters Then
-            GroupIndex = i
-            Exit For
-        End If
-    Next i
 End Function
 Public Function GenerateHTML(strSendOrRec As String, _
                              strFrom As String, _
@@ -560,24 +516,6 @@ Public Function OKToRun() As Boolean
     End If
     JPTRS.lblReportStatus.Caption = Str(Flag)
 End Function
-Public Function TimeForDaily() As Boolean
-    Dim Flag As Boolean
-    Flag = CBool(GetSetting(App.EXEName, "DailyReportSent", "Sent", 0))
-    TimeForDaily = False
-    If IsWeekday Then
-        If Hour(Now) = TimeToRun And Flag Then
-            TimeForDaily = False
-        ElseIf Hour(Now) <> TimeToRun And Flag Then
-            TimeForDaily = False
-            SaveSetting App.EXEName, "DailyReportSent", "Sent", "FALSE"
-        ElseIf Hour(Now) <> TimeToRun And Not Flag Then
-            TimeForDaily = False
-        ElseIf Hour(Now) = TimeToRun And Not Flag Then
-            TimeForDaily = True
-        End If
-        'JPTRS.lblReportStatus.Caption = Str(Flag)
-    End If
-End Function
 Public Function IsWeekday() As Boolean
     IsWeekday = False
     If Weekday(Now) = 1 Or Weekday(Now) = 7 Then
@@ -595,16 +533,6 @@ Public Function WeeklyReportRecpts() As String
     Next i
     WeeklyReportRecpts = tmpRecpts
 End Function
-Public Function DailyReportRecpts(GroupIndex As Integer) As String
-    DailyReportRecpts = ""
-    Dim tmpRecpts As String
-    Dim i         As Integer
-    For i = 0 To UBound(ReportsGroups(GroupIndex).Userlist)
-        tmpRecpts = tmpRecpts + ReportsGroups(GroupIndex).Userlist(i).EMail + ";"
-    Next i
-    DailyReportRecpts = tmpRecpts
-End Function
-
 Public Function strDayOfWeek(intDayOfWeek As Integer) As String
     Select Case intDayOfWeek
         Case 1
@@ -621,158 +549,10 @@ Public Function strDayOfWeek(intDayOfWeek As Integer) As String
             strDayOfWeek = "Friday"
         Case 7
             strDayOfWeek = "Saturday"
+        Case 8
+            strDayOfWeek = "EveryWeekDay"
     End Select
 End Function
-Public Sub WeeklyReportGetData()
-    On Error GoTo errs
-    Dim lngTIS  As Long
-    Dim i       As Integer
-    Dim rs      As New ADODB.Recordset
-    Dim strSQL1 As String
-    i = 0
-    cn_global.CursorLocation = adUseClient
-    strSQL1 = "SELECT * FROM packetlist d LEFT JOIN packetentrydb c ON c.idJobNum = d.idJobNum WHERE idDate = (SELECT MAX(idDate) FROM packetentrydb c2 Where c2.idJobNum = d.idJobNum) AND idStatus='OPEN' ORDER BY idDate DESC LIMIT 50"
-    Logger "Starting Weekly Report..."
-    Set rs = cn_global.Execute(strSQL1)
-    dtStartDate = DateAdd("d", -7, DateTime.Date)
-    dtEndDate = DateAdd("d", -3, DateTime.Date)
-    If rs.RecordCount < 1 Then Exit Sub
-    ReDim ReportData(0)
-    With rs
-        Do Until .EOF
-            If Format(!idDate, strUserDateFormat) >= dtStartDate And Format(!idDate, strUserDateFormat) <= dtEndDate Then
-                If !idAction = "CREATED" Then
-                    ReportData(i).Color = colCreate
-                ElseIf !idAction = "INTRANSIT" Then
-                    ReportData(i).Color = colInTransit
-                ElseIf !idAction = "RECEIVED" Then
-                    ReportData(i).Color = colReceived
-                ElseIf !idAction = "CLOSED" Then
-                    ReportData(i).Color = colClosed
-                ElseIf !idStatus = "OPEN" And !idAction = "FILED" Then
-                    ReportData(i).Color = colFiled
-                ElseIf !idAction = "REOPENED" Then
-                    ReportData(i).Color = colReopened
-                End If
-                If !idAction = "CREATED" Then
-                    ReportData(i).Action = !idAction & " by " & GetFullName(!idCreator)
-                ElseIf !idAction = "INTRANSIT" Then
-                    ReportData(i).Action = !idAction & " to " & GetFullName(!idUserTo)
-                ElseIf !idAction = "RECEIVED" Then
-                    ReportData(i).Action = !idAction & " by " & GetFullName(!idUser)
-                ElseIf !idAction = "NULL" Then
-                    ReportData(i).Action = "CLOSED by " & GetFullName(!idUser)
-                ElseIf !idStatus = "OPEN" And !idAction = "FILED" Then
-                    ReportData(i).Action = !idAction & " by " & GetFullName(!idUser)
-                ElseIf !idAction = "REOPENED" Then
-                    ReportData(i).Action = !idAction & " by " & GetFullName(!idUser)
-                End If
-                lngTIS = DateDiff("n", !idDate, Date & " " & Time)
-                ReportData(i).TimeInState = (IIf(lngTIS > 1440, Round(lngTIS / 1440, 1) & " days ", Round(lngTIS / 60, 1) & " hrs "))
-                ReportData(i).ActionDate = !idDate
-                ReportData(i).CreateDate = !idCreateDate
-                ReportData(i).Creator = !idCreator
-                ReportData(i).Customer = !idCustPONum
-                ReportData(i).Description = !idDescription
-                ReportData(i).JobNum = !idJobNum
-                ReportData(i).Part = !idPartNum
-                i = i + 1
-                ReDim Preserve ReportData(UBound(ReportData) + 1)
-            End If
-            .MoveNext
-        Loop
-    End With
-    ReportParseHTML Weekly
-    SendReport Weekly, "JPTReportServer@worthingtonindustries.com", WeeklyReportRecpts
-    Exit Sub
-errs:
-    ErrHandle Err.Number, Err.Description, "WeeklyReportGetData"
-End Sub
-Public Sub RunDailyReport()
-    On Error GoTo errs
-    Dim i As Integer
-    Logger "Starting Daily Report..."
-    Logger "Processing filter groups..."
-    GetReportGroups
-    Logger UBound(ReportsGroups) & " groups found..."
-    Logger "Precessing reports..."
-    For i = 1 To UBound(ReportsGroups)
-        Logger "Processing report " & i & " of " & UBound(ReportsGroups) & "..."
-        DailyReportGetData ReportsGroups(i).Filters
-        Logger "Recipients: " & DailyReportRecpts(i)
-        SendReport Daily, "JPTReportServer@worthingtonindustries.com", DailyReportRecpts(i)
-        'Logger "Waiting..."
-        Wait intWaitTime
-    Next i
-    Logger "Daily report complete!"
-    Exit Sub
-errs:
-    ErrHandle Err.Number, Err.Description, "RunDailyReport"
-End Sub
-Public Sub DailyReportGetData(Filters As String)
-    On Error GoTo errs
-    Dim lngTIS  As Long
-    Dim i       As Integer
-    Dim rs      As New ADODB.Recordset
-    Dim strSQL1 As String
-    i = 0
-    cn_global.CursorLocation = adUseClient
-    strSQL1 = "SELECT * FROM packetlist d LEFT JOIN packetentrydb c ON c.idJobNum = d.idJobNum WHERE idDate = (SELECT MAX(idDate) FROM packetentrydb c2 Where c2.idJobNum = d.idJobNum) AND idStatus='OPEN' ORDER BY idDate DESC LIMIT 50"
-    Logger "Starting Daily Report... Filters = " & FilterString(Filters)
-    Set rs = cn_global.Execute(strSQL1)
-    dtStartDate = DateTime.Date
-    dtEndDate = DateTime.Date
-    If rs.RecordCount < 1 Then Exit Sub
-    ReDim ReportData(0)
-    With rs
-        Do Until .EOF
-            If Format(!idDate, strUserDateFormat) >= dtStartDate And Format(!idDate, strUserDateFormat) <= dtEndDate And IsUnFiltered(Filters, !idPlant) Then
-                If !idAction = "CREATED" Then
-                    ReportData(i).Color = colCreate
-                ElseIf !idAction = "INTRANSIT" Then
-                    ReportData(i).Color = colInTransit
-                ElseIf !idAction = "RECEIVED" Then
-                    ReportData(i).Color = colReceived
-                ElseIf !idAction = "CLOSED" Then
-                    ReportData(i).Color = colClosed
-                ElseIf !idStatus = "OPEN" And !idAction = "FILED" Then
-                    ReportData(i).Color = colFiled
-                ElseIf !idAction = "REOPENED" Then
-                    ReportData(i).Color = colReopened
-                End If
-                If !idAction = "CREATED" Then
-                    ReportData(i).Action = !idAction & " by " & GetFullName(!idCreator)
-                ElseIf !idAction = "INTRANSIT" Then
-                    ReportData(i).Action = !idAction & " to " & GetFullName(!idUserTo)
-                ElseIf !idAction = "RECEIVED" Then
-                    ReportData(i).Action = !idAction & " by " & GetFullName(!idUser)
-                ElseIf !idAction = "NULL" Then
-                    ReportData(i).Action = "CLOSED by " & GetFullName(!idUser)
-                ElseIf !idStatus = "OPEN" And !idAction = "FILED" Then
-                    ReportData(i).Action = !idAction & " by " & GetFullName(!idUser)
-                ElseIf !idAction = "REOPENED" Then
-                    ReportData(i).Action = !idAction & " by " & GetFullName(!idUser)
-                End If
-                lngTIS = DateDiff("n", !idDate, Date & " " & Time)
-                ReportData(i).TimeInState = (IIf(lngTIS > 1440, Round(lngTIS / 1440, 1) & " days ", Round(lngTIS / 60, 1) & " hrs "))
-                ReportData(i).ActionDate = !idDate
-                ReportData(i).CreateDate = !idCreateDate
-                ReportData(i).Creator = !idCreator
-                ReportData(i).Customer = !idCustPONum
-                ReportData(i).Description = !idDescription
-                ReportData(i).JobNum = !idJobNum
-                ReportData(i).Part = !idPartNum
-                i = i + 1
-                ReDim Preserve ReportData(UBound(ReportData) + 1)
-            End If
-            .MoveNext
-        Loop
-    End With
-    ReportParseHTML Daily, Filters
-    Exit Sub
-errs:
-    ErrHandle Err.Number, Err.Description, "DailyReportGetData"
-End Sub
 Public Sub WeeklyReportParseCSV()
     On Error GoTo errs
     Dim strCSVName As String, strCSVFullName As String
@@ -788,56 +568,4 @@ Public Sub WeeklyReportParseCSV()
 errs:
     Logger "Failed while parsing Weekly Report!"
     If bolVerbose Then Logger "ERROR DTL:  SUB = WeeklyReportParseCSV | " & Err.Number & " - " & Err.Description
-End Sub
-Public Sub ReportParseHTML(intReportType As Integer, _
-                           Optional Filters As String) '0 = Weekly 1 = Daily
-    On Error GoTo errs
-    Logger "Parsing report to HTML..."
-    Dim tmpHTML As String
-    Dim i       As Integer
-    tmpHTML = tmpHTML + "<FONT STYLE=font-family:Tahoma;>" & vbCrLf
-    If intReportType = Weekly Then
-        tmpHTML = tmpHTML + "<FONT SIZE=4><U>Weekly Job Packet Report</U></FONT><BR>" & vbCrLf
-    ElseIf intReportType = Daily Then
-        tmpHTML = tmpHTML + "<FONT SIZE=4><U>Daily Job Packet Report</U></FONT><BR>" & vbCrLf
-        tmpHTML = tmpHTML + "<FONT SIZE=2> Filters:  " & FilterString(Filters) & "</FONT><BR>" & vbCrLf
-    End If
-    tmpHTML = tmpHTML + "<FONT SIZE=2> Run Date: " & Now & "</FONT><BR>" & vbCrLf
-    If intReportType = Weekly Then
-        tmpHTML = tmpHTML + "<FONT SIZE=2> Report Date: " & dtStartDate & " to " & dtEndDate & "</FONT><BR>" & vbCrLf
-    End If
-    tmpHTML = tmpHTML + "<BR>" & vbCrLf
-    tmpHTML = tmpHTML + "<table border=1 cellpadding=2>" & vbCrLf
-    tmpHTML = tmpHTML + "<tr>" & vbCrLf
-    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Job Num</th>" & vbCrLf
-    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Action</th>" & vbCrLf
-    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Action Date</th>" & vbCrLf
-    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Time In State</th>" & vbCrLf
-    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Description</th>" & vbCrLf
-    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Customer</th>" & vbCrLf
-    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Create Date</th>" & vbCrLf
-    tmpHTML = tmpHTML + "<th bgcolor=B3B3B3>Creator</th>" & vbCrLf
-    tmpHTML = tmpHTML + "</tr>"
-    For i = 0 To UBound(ReportData) - 1
-        tmpHTML = tmpHTML + "<tr>" & vbCrLf
-        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & "><B>" & ReportData(i).JobNum & "</B></td>" & vbCrLf
-        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & "> <font size=2>" & ReportData(i).Action & "</font></td>" & vbCrLf
-        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & "><font size=2>" & ReportData(i).ActionDate & "</font></td>" & vbCrLf
-        tmpHTML = tmpHTML + "<td align=center bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).TimeInState & "</td>" & vbCrLf
-        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & "><font size=2>" & ReportData(i).Description & "</font></td>" & vbCrLf
-        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & ReportData(i).Customer & "</td>" & vbCrLf
-        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & "><font size=2>" & ReportData(i).CreateDate & "</font></td>" & vbCrLf
-        tmpHTML = tmpHTML + "<td bgcolor=" & Hex$(ReportData(i).Color) & ">" & GetFullName(ReportData(i).Creator) & "</td>" & vbCrLf
-        tmpHTML = tmpHTML + "</tr>"
-    Next
-    tmpHTML = tmpHTML + "</table>"
-    strReportHTML = tmpHTML
-    Exit Sub
-errs:
-    If intReportType = Weekly Then
-        Logger "Failed while parsing Weekly Report HTML!"
-    ElseIf intReportType = Daily Then
-        Logger "Failed while parsing Daily Report HTML!"
-    End If
-    If bolVerbose Then Logger "ERROR DTL:  SUB =  ReportParseHTML | " & Err.Number & " - " & Err.Description
 End Sub

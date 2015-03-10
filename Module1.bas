@@ -2,7 +2,7 @@ Attribute VB_Name = "Module1"
 Option Explicit
 Global cn_global              As New ADODB.Connection
 Public Const intWaitTime      As Integer = 10000
-Public Const strSMTPServer    As String = "" '"mx.wthg.com"
+Public Const strSMTPServer    As String = "mx.wthg.com"
 Public Const strServerAddress As String = "localhost" '"ohbre-pwadmin01"
 Public Const strUsername      As String = "TicketApp"
 Public Const strPassword      As String = "yb4w4"
@@ -92,7 +92,17 @@ Private Declare Function GetIpAddrTable_API _
 Public intRetryFail          As Integer
 Public Const intRetryFailMax As Integer = 5
 Public bolExecutionPaused As Boolean
-Public strLogBuffer       As String
+Public Type UserAttributes
+    UserName As String
+    FullName As String
+    EMail As String
+    GetsDaily As Boolean
+    GetsWeekly As Boolean
+    Filters As String
+End Type
+Public Users() As UserAttributes
+Public strLogBuffer As String
+
 Public Sub RefreshUserList()
     With JPTRS
         .tmrCheckQueue.Enabled = False

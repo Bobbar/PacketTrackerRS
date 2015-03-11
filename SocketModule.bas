@@ -76,7 +76,7 @@ Public Sub PacketCommand(Command As String)
             Wait 1000
             EndProgram
         Case "STATUS"
-            SocketLog "STATUS: Uptime: " & ConvertTime(DateTime.Now) & "    Atmpts, Sucss, Rtry: " & lngAttempts & ", " & lngSuccess & ", " & lngRetries, ResponsePacket
+            SocketLog StatusReport, ResponsePacket '"STATUS: Uptime: " & ConvertTime(DateTime.Now) & "    Atmpts, Sucss, Rtry: " & lngAttempts & ", " & lngSuccess & ", " & lngRetries, ResponsePacket
         Case "PASSWORD"
             CheckPassword Command
         Case "LOADLOG"

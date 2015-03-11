@@ -42,6 +42,7 @@ Begin VB.Form JPTRS
       _ExtentX        =   14420
       _ExtentY        =   9869
       _Version        =   393217
+      Enabled         =   -1  'True
       ScrollBars      =   3
       TextRTF         =   $"JPTRS.frx":08CA
    End
@@ -517,12 +518,7 @@ End Sub
 Private Sub tmrReportClock_Timer()
     GetReports
     CheckSocketStatus
-'    lblTime = Now
-'    If OKToRun Then WeeklyReportGetData
-'    If TimeForDaily Then
-'        RunDailyReport
-'    End If
-RunReports
+    RunReports
     lblRptDay.Caption = strDayOfWeek(DayToRun)
     lblCurDay.Caption = strDayOfWeek(Weekday(Now))
 End Sub
@@ -533,7 +529,7 @@ Private Sub tmrTaskTimer_Timer()
     Else
     End If
     If CurrentInterval(MinsCounted, MinutesTillStatusReport) Then
-        Logger "STATUS: Uptime: " & ConvertTime(DateTime.Now) & "    Atmpts, Sucss, Rtry: " & lngAttempts & ", " & lngSuccess & ", " & lngRetries
+        Logger StatusReport '"STATUS: Uptime: " & ConvertTime(DateTime.Now) & " Verison: " & App.Major & "." & App.Minor & "." & App.Revision & "    Atmpts, Sucss, Rtry: " & lngAttempts & ", " & lngSuccess & ", " & lngRetries
     End If
     If MinsCounted >= 1440 Then MinsCounted = 0 'day has passed, start over
 End Sub

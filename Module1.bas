@@ -3,7 +3,7 @@ Option Explicit
 Global cn_global              As New ADODB.Connection
 Public Const intWaitTime      As Integer = 10000
 Public Const strSMTPServer    As String = "mx.wthg.com"
-Public Const strServerAddress As String = "localhost" '"ohbre-pwadmin01"
+Public Const strServerAddress As String = "ohbre-pwadmin01"
 Public Const strUsername      As String = "TicketApp"
 Public Const strPassword      As String = "yb4w4"
 Public Const strListenPort    As String = "1001"
@@ -39,11 +39,9 @@ Const REG_DWORD = 4
 Const REG_MULTI_SZ = 7
 Const ERROR_MORE_DATA = 234
 Const KEY_READ = &H20019 ' ((READ_CONTROL Or KEY_QUERY_VALUE Or
-
-
-Public bolVerbose   As Boolean
-Public strLogLoc    As String
-Public strCSVLoc    As String
+Public bolVerbose As Boolean
+Public strLogLoc  As String
+Public strCSVLoc  As String
 Public Type NOTIFYICONDATA
     cbSize As Long
     hwnd As Long
@@ -72,10 +70,8 @@ Public Declare Function Shell_NotifyIcon _
                                           pnid As NOTIFYICONDATA) As Boolean
 Public Const strDBDateFormat   As String = "YYYY-MM-DD"
 Public Const strUserDateFormat As String = "MM/DD/YYYY"
-
 Public Declare Sub Sleep Lib "kernel32.dll" (ByVal dwMilliseconds As Long)
 Public Declare Function GetTickCount Lib "kernel32" () As Long
-
 Public Const MinutesTillRefresh      As Long = 5 'Minutes between user list refresh
 Public Const MinutesTillStatusReport As Long = 720 'Minutes between status updates in log
 Public MinsCounted                   As Long
@@ -88,10 +84,9 @@ Private Declare Function GetIpAddrTable_API _
                 Alias "GetIpAddrTable" (pIPAddrTable As Any, _
                                         pdwSize As Long, _
                                         ByVal bOrder As Long) As Long
-
 Public intRetryFail          As Integer
 Public Const intRetryFailMax As Integer = 5
-Public bolExecutionPaused As Boolean
+Public bolExecutionPaused    As Boolean
 Public Type UserAttributes
     UserName As String
     FullName As String
@@ -100,9 +95,11 @@ Public Type UserAttributes
     GetsWeekly As Boolean
     Filters As String
 End Type
-Public Users() As UserAttributes
+Public Users()      As UserAttributes
 Public strLogBuffer As String
-
+Public Function StatusReport() As String
+StatusReport = "STATUS: Uptime: " & ConvertTime(DateTime.Now) & "   Version: " & App.Major & "." & App.Minor & "." & App.Revision & "    Atmpts, Sucss, Rtry: " & lngAttempts & ", " & lngSuccess & ", " & lngRetries
+End Function
 Public Sub RefreshUserList()
     With JPTRS
         .tmrCheckQueue.Enabled = False
@@ -413,7 +410,6 @@ Public Sub FindMySQLDriver()
     End If
     Logger "MySQL Driver = " & strSQLDriver
 End Sub
-
 ' Returns an array with the local IP addresses (as strings).
 ' Author: Christian d'Heureuse, www.source-code.biz
 Public Function GetIpAddrTable()
@@ -625,4 +621,3 @@ Public Sub Wait(ByVal DurationMS As Long)
         Sleep 1
     Loop
 End Sub
-

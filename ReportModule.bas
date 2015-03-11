@@ -79,6 +79,10 @@ Private Function GetReportRecipients(ReportID As Integer) As String
     strSQL1 = "SELECT users_0.idFullName, users_0.idEmail, users_0.idGroupID, reportsgroups_0.idGroupID, reportsgroups_0.idReportID, reportsgroups_0.idEntryID, reports_0.idReportName" & " FROM ticketdb.reports reports_0, ticketdb.reportsgroups reportsgroups_0, ticketdb.users users_0" & " WHERE users_0.idGroupID = reportsgroups_0.idGroupID AND reports_0.idReportID = reportsgroups_0.idReportID AND ((reportsgroups_0.idReportID='" & ReportID & "'))"
     cn_global.CursorLocation = adUseClient
     rs.Open strSQL1, cn_global, adOpenKeyset
+    If rs.RecordCount = 0 Then
+        GetReportRecipients = ""
+        Exit Function
+    End If
     Do Until rs.EOF
         With rs
             tmpRecipients = tmpRecipients + !idEmail & ";"
@@ -302,6 +306,11 @@ Public Sub SendReport(Report As ReportAttributes)
     Set Flds = iConf.Fields
     Dim MailTo As String
     MailTo = GetReportRecipients(Report.ID)
+    If MailTo = "" Then
+        Logger "No recipients found for this report. Moving on..."
+        UpdateReportHasRun Report, True
+        Exit Sub
+    End If
     Logger "Sending Report...  (" & Report.Name & " to " & MailTo & ")"
     ' Set the configuration
     Flds(cdoSendUsingMethod) = cdoSendUsingPort

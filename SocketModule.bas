@@ -101,7 +101,8 @@ Public Sub CheckPassword(Password As String)
     Dim rs          As New ADODB.Recordset
     Dim strSQL1     As String
     Dim strPassword As String
-    strSQL1 = "SELECT * FROM socketvars WHERE idPassword = MD5('" & Password & "');"
+    strPassword = OnlyAlphaNumericChars(Password)
+    strSQL1 = "SELECT * FROM socketvars WHERE idPassword = MD5('" & strPassword & "');"
     cn_global.CursorLocation = adUseClient
     rs.Open strSQL1, cn_global, adOpenKeyset
     With rs
@@ -118,7 +119,7 @@ Public Sub CheckPassword(Password As String)
     End If
     Exit Sub
 errs:
-    ErrHandle Err.Number, Err.Description, "CheckPassword"
+   If ErrHandle(Err.Number, Err.Description, "CheckPassword") Then Resume Next
 End Sub
 Public Sub CheckSocketStatus()
     With JPTRS

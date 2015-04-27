@@ -97,8 +97,42 @@ Public Type UserAttributes
 End Type
 Public Users()      As UserAttributes
 Public strLogBuffer As String
+Public Function OnlyAlphaNumericChars(ByVal OrigString As String) As String
+    '***********************************************************
+    'INPUT:  Any String
+    'OUTPUT: The Input String with all non-alphanumeric characters
+    '        removed
+    'EXAMPLE Debug.Print OnlyAlphaNumericChars("Hello World!")
+    'output = "HelloWorld")
+    'NOTES:  Not optimized for speed and will run slow on long
+    '        strings.  If you plan on using long strings, consider
+    '        using alternative method of appending to output string,
+    '        such as the method at
+    '        http://www.freevbcode.com/ShowCode.Asp?ID=154
+    '***********************************************************
+    Dim lLen  As Long
+    Dim sAns  As String
+    Dim lCtr  As Long
+    Dim sChar As String
+    OrigString = Trim(OrigString)
+    lLen = Len(OrigString)
+    For lCtr = 1 To lLen
+        sChar = Mid(OrigString, lCtr, 1)
+        If IsAlphaNumeric(Mid(OrigString, lCtr, 1)) Then
+            sAns = sAns & sChar
+        End If
+        DoEvents '(optional, but if processing long string,
+        'necessary to prevent program from appearing to hang)
+        'if used, write your app so no re-entrancy into this function
+        'can occur)
+    Next
+    OnlyAlphaNumericChars = sAns
+End Function
+Private Function IsAlphaNumeric(sChr As String) As Boolean
+    IsAlphaNumeric = sChr Like "[0-9A-Za-z]"
+End Function
 Public Function StatusReport() As String
-StatusReport = "STATUS: Uptime: " & ConvertTime(DateTime.Now) & "   Version: " & App.Major & "." & App.Minor & "." & App.Revision & "    Atmpts, Sucss, Rtry: " & lngAttempts & ", " & lngSuccess & ", " & lngRetries
+    StatusReport = "STATUS: Uptime: " & ConvertTime(DateTime.Now) & "   Version: " & App.Major & "." & App.Minor & "." & App.Revision & "    Atmpts, Sucss, Rtry: " & lngAttempts & ", " & lngSuccess & ", " & lngRetries
 End Function
 Public Sub RefreshUserList()
     With JPTRS
@@ -369,26 +403,35 @@ Function EnumRegistryValues(ByVal hKey As Long, ByVal KeyName As String) As Coll
     ' Close the key, if it was actually opened
     If handle Then RegCloseKey handle
 End Function
-Public Sub ErrHandle(lngErrNum As Long, strErrDescription As String, strOrigSub As String)
+Public Function ErrHandle(lngErrNum As Long, _
+                          strErrDescription As String, _
+                          strOrigSub As String) As Boolean
+    ErrHandle = False
     Select Case lngErrNum
         Case -2147467259, 3704
+            ErrHandle = False
             JPTRS.lblStatus.Caption = "Disconnected!"
             If bolVerbose Then Logger "ERROR DTL:  SUB = CheckQueue | " & Err.Number & " - " & Err.Description
-            Wait 5000
+            Wait 30000
             Logger "SQL Connection Lost!  Trying to Reconnect..."
             Set cn_global = Nothing
             If ConnectToDB Then
                 Logger "Connected!"
             End If
         Case 94
+            ErrHandle = True
+            Logger lngErrNum & " - " & strErrDescription & " | " & strOrigSub
+        Case -2147217900
+            ErrHandle = False
             Logger lngErrNum & " - " & strErrDescription & " | " & strOrigSub
         Case Else
+            ErrHandle = False
             Logger "######### Unhandled error! ###########"
             Logger lngErrNum & " - " & strErrDescription & " | " & strOrigSub
             Logger "Ending..."
             Call JPTRS.Form_QueryUnload(0, 0)
     End Select
-End Sub
+End Function
 Public Sub FindMySQLDriver()
     Logger "Scanning for MySQL Driver..."
     GetODBCDrivers
@@ -461,9 +504,9 @@ Public Sub GetUserIndex()
             Users(.AbsolutePosition).UserName = UCase$(!idUsers)
             Users(.AbsolutePosition).FullName = !idFullname
             Users(.AbsolutePosition).EMail = !idEmail
-            Users(.AbsolutePosition).GetsDaily = CBool(!idJPTDailyReport)
-            Users(.AbsolutePosition).GetsWeekly = CBool(!idJPTReport)
-            Users(.AbsolutePosition).Filters = !idCompanyFilters
+            'Users(.AbsolutePosition).GetsDaily = CBool(!idJPTDailyReport)
+            'Users(.AbsolutePosition).GetsWeekly = CBool(!idJPTReport)
+            'Users(.AbsolutePosition).Filters = !idCompanyFilters
             rs.MoveNext
         End With
     Loop

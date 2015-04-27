@@ -135,7 +135,7 @@ Private Function ParseDate(DateCode As String) As Date
             Case "TODAY"
                 tmpDate = DateAdd("d", Modifier, DateTime.Date)
         End Select
-    ElseIf UBound(SplitCode) = 1 Then
+    ElseIf UBound(SplitCode) = 0 Then
         strVar = SplitCode(0)
         tmpDate = DateTime.Date
     End If
